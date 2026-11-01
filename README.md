@@ -43,6 +43,31 @@ pytest
 python -m fraudradar.evaluate
 ```
 
+## Training a model
+
+Training is separate from running the services and needs none of Docker, Kafka or a GPU. Install the
+training libraries (LightGBM, scikit-learn, SHAP, pandas, Polars, DuckDB, JupyterLab) in one go:
+
+```bash
+conda env create -f environment.yml
+```
+
+or, with plain pip in a virtual environment:
+
+```bash
+pip install -r requirements-train.txt
+```
+
+Then, in the activated environment, make `fraudradar.features` importable from notebooks without pulling in the
+service dependencies:
+
+```bash
+pip install -e . --no-deps
+```
+
+Keep downloaded datasets in `training/data/` and trained models in `models/`; both are git-ignored. Link to
+the dataset in this README rather than committing it.
+
 ## How it works
 
 ```

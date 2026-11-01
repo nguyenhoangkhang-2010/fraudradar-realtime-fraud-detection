@@ -1,0 +1,30 @@
+# Libraries for training a fraud model on your own machine. Not needed to run the FraudRadar services.
+#
+#   pip install -r requirements-train.txt
+#   pip install -e . --no-deps          # lets notebooks import fraudradar.features
+#
+# Lower bounds only: pip picks the newest versions that work together on your Python (3.10 or newer).
+# Once you have a run you trust, record exact versions with `pip freeze > requirements-train.lock.txt`.
+
+# modelling
+lightgbm>=4.3
+scikit-learn>=1.4
+shap>=0.45
+
+# data
+numpy>=1.26
+pandas>=2.1
+pyarrow>=15
+polars>=1.0          # faster than pandas on multi-million-row files
+duckdb>=1.0          # SQL over Parquet/CSV without loading it all into memory
+
+# plots and notebooks
+matplotlib>=3.8
+jupyterlab>=4.1
+ipykernel>=6.29
+
+# fetching Kaggle datasets from the command line (needs a free Kaggle API token)
+kaggle>=1.6
+
+# imported by fraudradar.schemas, which fraudradar.features depends on
+orjson>=3.9

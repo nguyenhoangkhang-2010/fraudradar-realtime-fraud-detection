@@ -1,0 +1,28 @@
+# Conda environment for training a fraud model. Not needed to run the FraudRadar services.
+#
+#   conda env create -f environment.yml
+#   conda activate fraudradar-train
+#   pip install -e . --no-deps          # lets notebooks import fraudradar.features
+#
+# The scientific stack comes from conda-forge; the few pure-Python extras come from PyPI.
+# Lower bounds only. Once you have a run you trust, record it with `conda env export > environment.lock.yml`.
+name: fraudradar-train
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy>=1.26
+  - pandas>=2.1
+  - pyarrow>=15
+  - scikit-learn>=1.4
+  - lightgbm>=4.3
+  - shap>=0.45
+  - matplotlib>=3.8
+  - jupyterlab>=4.1
+  - ipykernel>=6.29
+  - pip:
+      - polars>=1.0
+      - duckdb>=1.0
+      - kaggle>=1.6
+      - orjson>=3.9
