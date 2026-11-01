@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FraudRadar</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.45.3/dist/globe.gl.min.js"></script>
+</head>
+<body class="calm">
+  <div id="globe"></div>
+  <div id="vignette"></div>
+  <div id="flash"></div>
+
+  <header class="hud top">
+    <div class="brand"><span class="dot"></span><b>FRAUDRADAR</b><small>live payment defence</small></div>
+    <div id="status" class="status"><i></i><span>Monitoring &middot; all clear</span></div>
+    <div class="actions">
+      <span id="conn" class="conn off">connecting</span>
+      <label>Ring size
+        <select id="size">
+          <option value="8">8 accounts</option>
+          <option value="14" selected>14 accounts</option>
+          <option value="30">30 accounts</option>
+          <option value="50">50 accounts</option>
+        </select>
+      </label>
+      <button id="attack">Launch attack</button>
+    </div>
+  </header>
+
+  <aside id="incident" class="glass">
+    <div class="eyebrow" id="inc-title">Incident</div>
+    <div class="clock">
+      <b id="inc-clock">0.0s</b>
+      <span id="inc-clock-label">attack in progress, undetected</span>
+    </div>
+    <div class="bar"><i id="inc-bar"></i></div>
+    <dl>
+      <div><dt>Blocked</dt><dd id="inc-blocked">0 / 0</dd></div>
+      <div><dt>Accounts</dt><dd id="inc-accounts">0</dd></div>
+      <div><dt>Stopped</dt><dd id="inc-stopped" class="good">$0</dd></div>
+      <div><dt>Got through</dt><dd id="inc-leaked" class="bad">$0</dd></div>
+    </dl>
+    <div class="from"><span>Ring origin</span><b id="inc-from">&ndash;</b></div>
+    <div class="target"><span>Target account</span><b id="inc-target">&ndash;</b></div>
+    <p id="inc-why" class="why"></p>
+  </aside>
+
+  <aside id="network" class="glass">
+    <div class="eyebrow">Account network <small>last 25 s</small></div>
+    <canvas id="graph"></canvas>
+  </aside>
+
+  <div id="moment"><h1 id="moment-title"></h1><p id="moment-sub"></p></div>
+  <div id="tip" class="tip"></div>
+
+  <footer class="hud bottom">
+    <div class="kpi"><span>Throughput</span><b id="k-tps">0</b><i>tx / s</i></div>
+    <div class="kpi"><span>Latency p99</span><b id="k-p99">0</b><i>ms, event to decision</i></div>
+    <div class="kpi"><span>Scored</span><b id="k-total">0</b><i>transactions</i></div>
+    <div class="kpi"><span>Blocked</span><b id="k-blocked">0</b><i>transactions</i></div>
+    <div class="kpi"><span>Fraud stopped</span><b id="k-saved" class="good">$0</b><i>blocked value</i></div>
+    <div class="kpi small"><span>Precision / recall</span><b id="k-pr">&ndash;</b><i>this session</i></div>
+  </footer>
+
+  <script src="app-globe.js"></script>
+</body>
+</html>

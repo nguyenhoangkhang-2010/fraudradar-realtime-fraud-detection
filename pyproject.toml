@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fraudradar"
+version = "0.1.0"
+description = "Real-time fraud detection command center: streaming features, graph signals, live demo"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiokafka>=0.11",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "orjson>=3.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fraudradar = ["api/static/**/*", "data/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
