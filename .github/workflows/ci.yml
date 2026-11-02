@@ -40,6 +40,7 @@ jobs:
         run: |
           python -m fraudradar.evaluate --seconds 40 --tps 80
           python -m fraudradar.evaluate --seconds 40 --tps 80 --scorer lightgbm
+          python -m fraudradar.skew --seconds 30 --tps 80
 
   frontend:
     name: Frontend syntax

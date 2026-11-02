@@ -71,7 +71,10 @@ class LightGBMScorer:
             ) from exc
         directory = Path(directory)
         meta = json.loads((directory / META_FILE).read_text(encoding="utf-8"))
-        booster = lgb.Booster(model_file=str(directory / MODEL_FILE))
+        # Read the text and fix line endings ourselves: Git on Windows can turn the model file's
+        # LF into CRLF (core.autocrlf), and LightGBM refuses to parse a CRLF model.
+        text = (directory / MODEL_FILE).read_bytes().decode("utf-8").replace("\r\n", "\n")
+        booster = lgb.Booster(model_str=text)
         if list(booster.feature_name()) != list(meta["features"]):
             raise ValueError("model file and metadata disagree about the feature list")
         return cls(booster, meta)

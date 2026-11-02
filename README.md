@@ -234,25 +234,66 @@ Read it as a check that serving works, not as a verdict on the model:
 - **The simulator was bent towards the model, and that makes the comparison circular.** A ring now ends each
   account with a sweep, which is what PaySim fraud looks like and what the model learned. The model catches every
   sweep and misses most of the smaller payments before it, which is why it stops less money than the heuristic.
-- **Three numbers are guesses, not measurements.** `AMOUNT_SCALE` (1,500) maps the simulator's amounts to PaySim's
-  range; `SIM_HOUR_MS` (one simulated hour per second) gives the `hour` feature; the share of honest payments that
-  empty an account (`legit_drain_rate`, 0.2%) is invented. 20 of the 33 honest blocks are those honest
-  sweeps, which the model treats as theft. The other 13 are not sweeps and depend on the amount scale: in a
-  similar replay (120 tx/s), changing it from 150 to 1,500 to 5,000 moved honest blocks from 0.10% to 0.20% to
-  1.4% while every ring account was still caught.
-- **Training-serving skew is unmeasured.** Nothing yet compares the live feature distributions with PaySim's.
-  That is the next roadmap item.
+- **Honest traffic does not look like PaySim's.** The [skew check](#training-serving-skew-check) measured it:
+  PaySim's honest payments empty the sender's account 31% of the time and the simulator's do 0.1%, and the
+  simulator has no zero-balance senders (PaySim: 33%). So the 33 honest blocks above say how the model treats
+  *this simulator's* honest traffic, not how it would treat PaySim's. 20 of the 33 are honest sweeps, which the
+  model treats as theft; the other 13 depend on the amount scale (in a similar replay, 150 / 1,500 / 5,000 gave
+  0.10% / 0.20% / 1.4% honest blocks).
 - One prediction runs in the scorer's event loop, one process; throughput under load is not measured.
+
+## Training-serving skew check
+
+A model scores whatever features it is given, so if the stream feeds it values spread differently from the ones
+it learned from, its scores mean something else. `python -m fraudradar.skew` replays the simulator through the
+same `PaymentFeatureStore` the scorer uses and compares every feature with `reference_stats.json`, which the
+notebook writes from the training part of PaySim (section 4b). It reports the population stability index (PSI)
+per feature, below 0.1 close, 0.1 to 0.25 moved, above 0.25 a different distribution; honest traffic is compared
+with all PaySim payments and the fraud ring with PaySim's fraud. It also prints the amount scale that would line
+up the median amount, and how often the model splits on each feature (a feature with 0 splits cannot matter, so
+its skew is harmless). It changes nothing by itself. The ring is a few dozen payments, so its figures are noisy.
+The reference is `reference_stats.json`, made by the notebook from the real PaySim training part (3,820,599
+payments, 3,193 of them fraud) and committed next to the model.
+
+**First measurement** (`python -m fraudradar.skew`, seed 7, 120 s at 150 tx/s, honest traffic against all PaySim
+payments). 8 of the 11 features that differ are ones the model uses; the other 3 are never split on.
+
+| Feature | PaySim | Simulator | PSI |
+|---|---|---|---|
+| Payment is a `TRANSFER` | 8% | 40% | 2.5 (all types) |
+| Payment is a `CASH_OUT` / `CASH_IN` | 36% / 22% | 13% / 0% | |
+| Payment empties the sender's account | 31% | 0.1% | 1.8 |
+| Sender's balance was zero | 33% | 0% | 2.8 |
+| Amount is at least 100x the sender's balance | 37% | 0% | 5.4 (ratio) |
+| Hour of day | night lull, 39% of fraud before 10:00 | even | 0.8 |
+| Amount (median, log scale) | 11.2 | 11.1 | 0.77 |
+| Recipient's earlier payments received | median 2 | median 5 | 0.7 |
+
+What it says:
+
+- **The simulator's money model is far from PaySim's.** In PaySim many senders have no money or send more than they
+  hold, and a third of honest payments empty the account. In the simulator senders always have enough and almost
+  never empty it. The model can only tell a sweep from a theft by combining several of these signals, and the
+  simulator never produces the combinations it learned from.
+- **`AMOUNT_SCALE` holds up.** Scanning it from 500 to 8,000, the amount distance is smallest between 1,500 and
+  1,760, and the medians match to within 0.2 on the log scale. The remaining distance is the shape of the amount
+  distribution, not its level. The scale that aligns the medians is 1,760; the default stays at 1,500.
+- **The ring differs from PaySim fraud too.** It pools money into one mule, so the recipient has a long history
+  (median 19 earlier payments), while PaySim fraud mostly goes to fresh accounts (median 0). Its amounts are far
+  larger (median 15.4 against 12.9 on the log scale). Some ring payments are blocked partly because of that.
+- Not fixed here. Making the simulator's honest traffic match these figures means calibrating it to PaySim, which is
+  a design change of its own and would make the comparison with the model more circular, not less.
 
 ## Roadmap
 
 - [x] Train a LightGBM model on PaySim and report it honestly (see above)
 - [x] Serve that model in the scorer in place of `HeuristicScorer` (opt in with `SCORER=lightgbm`)
 - [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
-- [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim)
+- [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim); the skew check lists what is off
 - [ ] Load test, with p50/p99 under rising throughput
 - [ ] Drift detection and automatic retraining when attackers change tactics
-- [ ] Feature lineage and a training-serving skew check
+- [x] Training-serving skew check, with a first measurement against the real PaySim training part (see above)
+- [ ] Feature lineage
 
 ## Layout
 
@@ -267,7 +308,8 @@ src/fraudradar/
   payment_features.py  the PaySim model's 14 inputs, built from the stream
   model.py       heuristic scorer and thresholds
   lgbm.py        loads the trained LightGBM model and explains its scores
-  artifacts/     the trained model and its metadata
+  artifacts/     the trained model, its metadata and (once added) reference_stats.json
+  skew.py        training-serving skew check
   serving.py     builds the engine for a scorer name
   engine.py      features -> score -> action
   evaluate.py    offline replay and metrics
