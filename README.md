@@ -241,6 +241,10 @@ Read it as a check that serving works, not as a verdict on the model:
   *this simulator's* honest traffic, not how it would treat PaySim's. 20 of the 33 are honest sweeps, which the
   model treats as theft; the other 13 depend on the amount scale (in a similar replay, 150 / 1,500 / 5,000 gave
   0.10% / 0.20% / 1.4% honest blocks).
+- **Live on Kafka** (Docker Compose, `SCORER=lightgbm`, one laptop, 120 tx/s): the UI showed about 7 ms p50 and
+  22 ms p99 from event time to decision, and a ring of 14 accounts had 38 of its 45 payments blocked, the first
+  within the same tick. One observation, not a load test. The Docker image needs the `libgomp1` system package for
+  LightGBM; the slim Python image lacks it and the scorer crashed on start until the Dockerfile installed it.
 - One prediction runs in the scorer's event loop, one process; throughput under load is not measured.
 
 ## Training-serving skew check
