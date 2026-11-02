@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from .engine import ScoringEngine
-from .payment_features import PaymentFeatureStore
+from .payment_features import AMOUNT_SCALE, PaymentFeatureStore
 
 ARTIFACT_DIR = Path(__file__).parent / "artifacts" / "paysim_v1"
 MODEL_FILE = "lgbm_paysim.txt"
@@ -79,6 +79,10 @@ class LightGBMScorer:
             raise ValueError("model file and metadata disagree about the feature list")
         return cls(booster, meta)
 
+    def score_batch(self, x: np.ndarray) -> np.ndarray:
+        """Probabilities for many rows at once; `score` row by row gives the same numbers."""
+        return self.booster.predict(x)
+
     def score(self, x: np.ndarray) -> tuple[float, list[str]]:
         p = float(self.booster.predict(x, num_threads=1)[0])
         if p < self._explain_from:
@@ -94,9 +98,10 @@ def load_lightgbm_engine(
     directory: str | Path = ARTIFACT_DIR,
     block: float | None = None,
     review: float | None = None,
+    amount_scale: float = AMOUNT_SCALE,
 ) -> ScoringEngine:
     scorer = LightGBMScorer.load(directory)
-    store = PaymentFeatureStore(scorer.feature_names, scorer.meta["type_categories"])
+    store = PaymentFeatureStore(scorer.feature_names, scorer.meta["type_categories"], amount_scale=amount_scale)
     return ScoringEngine(
         store,
         scorer,

@@ -50,6 +50,7 @@ pip install -e ".[dev,model]"
 pytest
 python -m fraudradar.evaluate
 python -m fraudradar.evaluate --scorer lightgbm
+python -m fraudradar.skew
 ```
 
 ## Training a model
@@ -284,11 +285,57 @@ What it says:
 - Not fixed here. Making the simulator's honest traffic match these figures means calibrating it to PaySim, which is
   a design change of its own and would make the comparison with the model more circular, not less.
 
+## Replaying the real PaySim log
+
+The simulator's honest traffic does not look like PaySim's (see above), so numbers measured on it say little about the
+model. `python -m fraudradar.replay` feeds the model the rows of the real PaySim file instead, in file order, through
+the same `PaymentFeatureStore` and the same bundled model the scorer uses, and scores them against the fraud labels.
+It needs the dataset CSV (not in the repo; download it from [Kaggle](https://www.kaggle.com/datasets/ealaxi/paysim1)
+and put it in `training/data/`, which is git-ignored), and takes about a minute and a half:
+
+```bash
+python -m fraudradar.replay --part test
+```
+
+The history features count every earlier payment, so the whole file is walked in order and only the chosen part is
+scored. The CSV used here has the same SHA-256 as the one the model was trained on (`16910f90...eea6b`).
+
+Test part (hours 356-743, never used for training or for choosing thresholds; 1,248,736 payments, 4,250 fraud),
+at the two thresholds the notebook chose on validation:
+
+| | Replay through the serving code | Notebook |
+|---|---|---|
+| Average precision | 0.99952 | 0.99952 |
+| Flagged above the review threshold (0.1% of honest payments on validation): fraud caught | 4,249 of 4,250 (99.976%) | 99.976% |
+| ... alerts that are fraud | 89.698% (488 false alarms) | 89.698% |
+| ... honest payments flagged | 0.039% | 0.039% |
+| Flagged above the block threshold (0.01%): fraud caught | 4,249 of 4,250 | 99.976% |
+| ... alerts that are fraud | 98.493% (65 false alarms) | 98.493% |
+| ... honest payments flagged | 0.0052% | 0.0052% |
+
+Raw output: [docs/results/paysim_replay](docs/results/paysim_replay). What this does and does not show:
+
+- **Training and serving agree.** Features rebuilt one payment at a time by the serving code reproduce the
+  notebook's vectorised features closely enough that every metric above matches to the digits shown. That is the
+  check the skew section could not make on simulated traffic. A test also checks that scoring in chunks gives the
+  same numbers as the service's one-at-a-time path.
+- **It is still PaySim.** These are the numbers from the PaySim section again, now through the serving path. PaySim is
+  a simulation whose fraud is mostly "empty the account"; this says nothing about real-world fraud. The one missed
+  fraud in 4,250 is not a sign of a perfect model.
+- **Only the test part is a fair score.** The notebook used the validation part for early stopping and for the
+  thresholds, and the model trained on the train part. The replay prints those too (validation AP 1.0000,
+  train AP 0.9962); do not quote them as performance.
+- **Speed.** Walking and scoring all 6.36 million rows in chunks took 94 s on a laptop (about 68,000 rows/s, one
+  process). Scoring the first 30,000 rows one at a time through `ScoringEngine.handle`, as the service does, ran at
+  about 25,000 rows/s with a median of 0.04 ms and a p99 of 0.10 ms per payment. Those are early rows with almost no
+  fraud, so few of them paid for the explanation step; it is not a load test and leaves out Kafka.
+
 ## Roadmap
 
 - [x] Train a LightGBM model on PaySim and report it honestly (see above)
 - [x] Serve that model in the scorer in place of `HeuristicScorer` (opt in with `SCORER=lightgbm`)
 - [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
+- [x] Replay the real PaySim log through the serving code and compare with the notebook (see above)
 - [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim); the skew check lists what is off
 - [ ] Load test, with p50/p99 under rising throughput
 - [ ] Drift detection and automatic retraining when attackers change tactics
@@ -310,6 +357,7 @@ src/fraudradar/
   lgbm.py        loads the trained LightGBM model and explains its scores
   artifacts/     the trained model, its metadata and (once added) reference_stats.json
   skew.py        training-serving skew check
+  replay.py      replays the real PaySim log through the serving code
   serving.py     builds the engine for a scorer name
   engine.py      features -> score -> action
   evaluate.py    offline replay and metrics
