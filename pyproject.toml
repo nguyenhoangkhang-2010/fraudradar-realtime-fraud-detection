@@ -17,12 +17,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# Serving the PaySim-trained model; the heuristic scorer needs none of this.
+model = ["lightgbm>=4.0", "numpy>=1.24"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-fraudradar = ["api/static/**/*", "data/*"]
+fraudradar = ["api/static/**/*", "data/*", "artifacts/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,8 +1,17 @@
 from __future__ import annotations
 
-from .features import FeatureStore
+from typing import Any, Protocol
+
 from .model import Scorer, decide
 from .schemas import Decision, Transaction
+
+
+class FeatureSource(Protocol):
+    """What the engine needs from a feature store; what `features` returns is the scorer's business."""
+
+    def features(self, tx: Transaction) -> Any: ...
+    def update(self, tx: Transaction) -> None: ...
+    def flag(self, account: str, ts: int) -> None: ...
 
 
 class ScoringEngine:
@@ -10,7 +19,7 @@ class ScoringEngine:
 
     def __init__(
         self,
-        store: FeatureStore,
+        store: FeatureSource,
         scorer: Scorer,
         block_threshold: float = 0.85,
         review_threshold: float = 0.5,

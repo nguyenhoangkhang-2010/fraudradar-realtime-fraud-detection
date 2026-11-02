@@ -9,8 +9,8 @@ map and account graph. A button launches a fraud ring so you can watch the
 system find it.
 
 > **Status: working scaffold.** The streaming path, feature logic, tests and UI
-> run end to end. The scorer is still a hand-weighted heuristic and its state
-> lives in memory. See [Roadmap](#roadmap) for what is deliberately not done yet.
+> run end to end. The scorer is a hand-weighted heuristic by default, or a
+> LightGBM model trained on PaySim (`SCORER=lightgbm`); its state lives in memory. See [Roadmap](#roadmap) for what is deliberately not done yet.
 
 ## Run it
 
@@ -20,7 +20,12 @@ Requires Docker.
 docker compose up --build
 ```
 
-Open <http://localhost:8000> and press **Launch attack**.
+Open <http://localhost:8000> and press **Launch attack**. To score with the LightGBM model trained on PaySim
+instead of the heuristic, see [Serving the PaySim model](#serving-the-paysim-model):
+
+```bash
+SCORER=lightgbm docker compose up --build
+```
 
 The page is a flat world map you can drill into: **world, then country, then city, then district**.
 
@@ -41,9 +46,10 @@ needs internet access for MapLibre and d3. `/globe.html` is an earlier 3D-globe 
 Offline checks need no Docker or Kafka:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,model]"
 pytest
 python -m fraudradar.evaluate
+python -m fraudradar.evaluate --scorer lightgbm
 ```
 
 ## Training a model
@@ -147,13 +153,16 @@ Limits worth knowing:
 ## Results so far
 
 Measured by `python -m fraudradar.evaluate` (seed 7, 120 s at 150 tx/s, two
-rings of 14 accounts):
+rings of 14 accounts), heuristic scorer:
 
 | Metric | Value |
 |---|---|
-| Honest transactions blocked | 0 of 18,000 |
-| Ring transactions blocked | 69 of 81 (85%) |
-| Time to first block after a ring starts | 0.4 s and 1.4 s for the two rings |
+| Honest transactions blocked | 1 of 18,000 |
+| Ring transactions blocked | 61 of 80 (76%) |
+| Ring accounts blocked at least once | 27 of 28 |
+| Time to first block after a ring starts | 2.6 s and 0.7 s for the two rings |
+
+The same replay with `--scorer lightgbm` is in [Serving the PaySim model](#serving-the-paysim-model).
 
 These come from synthetic data produced by the same project, so they show the
 pipeline works. They do **not** show how it would do on real fraud.
@@ -194,10 +203,51 @@ How to read this honestly:
   on the test part (last column).
 - The PaySim fraud rate (about 0.13%) is a property of the simulation.
 
+## Serving the PaySim model
+
+`SCORER=lightgbm` makes the scorer service (and `python -m fraudradar.evaluate --scorer lightgbm`) use the model
+from the section above. The model is a 0.47 MB text file in `src/fraudradar/artifacts/paysim_v1/`, next to the
+metadata the notebook wrote. `pip install -e ".[model]"` adds LightGBM; the heuristic needs nothing extra.
+
+What changed to make that possible:
+
+- A transaction can now carry `kind`, the sender's and recipient's balance before the payment, and a merchant
+  flag, as a mobile-money feed does. The simulator keeps account balances up to date. A fraud-ring account holds
+  exactly what it will send, so its last payment empties it; the mule pools what arrives.
+- `payment_features.py` rebuilds the model's 14 inputs from the stream, with the same point-in-time rule as the
+  heuristic's store. It refuses a model whose feature list it cannot build.
+- The alert thresholds are not 0.85 and 0.5. They come from the model's metadata (score at 0.1% and at 0.01% of
+  honest payments flagged on validation), about 0.004 and 0.006, because the model's scores follow the base rate.
+  `BLOCK_THRESHOLD` and `REVIEW_THRESHOLD` override them.
+
+The same replay (seed 7, 120 s at 150 tx/s, two rings of 14 accounts):
+
+| Metric | Heuristic | LightGBM |
+|---|---|---|
+| Honest transactions blocked | 1 of 18,000 | 33 of 18,000 (0.18%) |
+| Ring transactions blocked | 61 of 80 (76%) | 44 of 80 (55%) |
+| Ring accounts blocked at least once | 27 of 28 | 28 of 28 |
+| Ring money stopped | 80% | 54% |
+
+Read it as a check that serving works, not as a verdict on the model:
+
+- **The simulator was bent towards the model, and that makes the comparison circular.** A ring now ends each
+  account with a sweep, which is what PaySim fraud looks like and what the model learned. The model catches every
+  sweep and misses most of the smaller payments before it, which is why it stops less money than the heuristic.
+- **Three numbers are guesses, not measurements.** `AMOUNT_SCALE` (1,500) maps the simulator's amounts to PaySim's
+  range; `SIM_HOUR_MS` (one simulated hour per second) gives the `hour` feature; the share of honest payments that
+  empty an account (`legit_drain_rate`, 0.2%) is invented. 20 of the 33 honest blocks are those honest
+  sweeps, which the model treats as theft. The other 13 are not sweeps and depend on the amount scale: in a
+  similar replay (120 tx/s), changing it from 150 to 1,500 to 5,000 moved honest blocks from 0.10% to 0.20% to
+  1.4% while every ring account was still caught.
+- **Training-serving skew is unmeasured.** Nothing yet compares the live feature distributions with PaySim's.
+  That is the next roadmap item.
+- One prediction runs in the scorer's event loop, one process; throughput under load is not measured.
+
 ## Roadmap
 
 - [x] Train a LightGBM model on PaySim and report it honestly (see above)
-- [ ] Serve that model in the scorer in place of `HeuristicScorer`
+- [x] Serve that model in the scorer in place of `HeuristicScorer` (opt in with `SCORER=lightgbm`)
 - [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
 - [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim)
 - [ ] Load test, with p50/p99 under rising throughput
@@ -213,8 +263,12 @@ src/fraudradar/
   geo.py         active places and districts, shared by the simulator and the map
   data/          countries, places and districts as GeoJSON (built, committed)
   generator.py   synthetic traffic and fraud rings
-  features.py    streaming features, point-in-time correct
-  model.py       scorers and thresholds
+  features.py    streaming features for the heuristic, point-in-time correct
+  payment_features.py  the PaySim model's 14 inputs, built from the stream
+  model.py       heuristic scorer and thresholds
+  lgbm.py        loads the trained LightGBM model and explains its scores
+  artifacts/     the trained model and its metadata
+  serving.py     builds the engine for a scorer name
   engine.py      features -> score -> action
   evaluate.py    offline replay and metrics
   simulator/     Kafka producer + control listener

@@ -51,6 +51,10 @@ services:
   scorer:
     <<: *app
     command: ["python", "-m", "fraudradar.scorer"]
+    environment:
+      KAFKA_BOOTSTRAP: redpanda:9092
+      # heuristic (default) or lightgbm, e.g.  SCORER=lightgbm docker compose up
+      SCORER: ${SCORER:-heuristic}
 
   api:
     <<: *app
