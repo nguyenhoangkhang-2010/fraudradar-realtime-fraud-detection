@@ -107,3 +107,14 @@ def test_every_ring_account_is_stopped_at_least_once():
     r = run_offline(seed=7, seconds=60, tps=100, ring_starts=(15, 40), scorer="lightgbm")
     assert r["ring_accounts_blocked"] == r["ring_accounts"] == 28
     assert r["false_block_rate"] < 0.01
+
+
+def test_a_model_file_with_windows_line_endings_still_loads(tmp_path):
+    # Git on Windows (core.autocrlf) can rewrite the model's line endings, which LightGBM cannot parse.
+    from fraudradar.lgbm import ARTIFACT_DIR, META_FILE, MODEL_FILE
+
+    crlf, lf = bytes([13, 10]), bytes([10])
+    raw = (ARTIFACT_DIR / MODEL_FILE).read_bytes().replace(crlf, lf)
+    (tmp_path / MODEL_FILE).write_bytes(raw.replace(lf, crlf))
+    (tmp_path / META_FILE).write_bytes((ARTIFACT_DIR / META_FILE).read_bytes())
+    assert LightGBMScorer.load(tmp_path).feature_names == LightGBMScorer.load().feature_names

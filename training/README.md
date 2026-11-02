@@ -16,6 +16,15 @@ regression, and saves the model and its metadata. It runs on Kaggle Notebooks or
 5. Results go to `/kaggle/working`. Choose **Save Version > Save & Run All (Commit)** to keep them: they then
    appear in the notebook's **Output** tab, where you can download them or turn them into a Kaggle Dataset.
 
+## Only the reference statistics for the skew check
+
+The notebook also writes `reference_stats.json`, how each feature was spread over the training part of PaySim.
+`python -m fraudradar.skew` compares the live stream with it. The file is written at **section 4b**, right after
+the time split and before any model is trained, so if that is all you need you can run the cells down to 4b
+(a few minutes), stop, and download `out/reference_stats.json`. Put it next to the model in
+`src/fraudradar/artifacts/paysim_v1/`. Do not replace the committed model with one from a different run unless
+you also replace `metadata.json` and re-measure; the reference and the model describe the same data and split.
+
 ## Run it in Google Colab instead
 
 Upload the notebook at <https://colab.research.google.com> (**File > Upload notebook**) and run it from the top.

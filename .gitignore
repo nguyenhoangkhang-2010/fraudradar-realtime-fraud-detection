@@ -26,3 +26,4 @@ work/
 # raw notebook outputs: the small result files live in docs/results/, the model is added deliberately
 /training/fraud_model_paysim/
 /training/*.zip
+/training/archive/
