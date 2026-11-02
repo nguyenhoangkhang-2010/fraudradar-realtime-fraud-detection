@@ -1,0 +1,53 @@
+Replaying training\data\PS_20174392719_1491204439457_log.csv (train, valid, test) ...
+
+Part: train  (3,820,599 payments, 3,193 fraud)
+metric                                  replay    notebook
+average precision                      0.99615         nan
+  (float32 inputs, as in notebook)     0.99615
+-- flagged above the review threshold 0.00424 (0.001 of honest payments on validation)
+  recall                               0.99562
+  precision                            0.79854
+  false_alarm_rate                     0.00021
+  caught / missed / false alarms         3,179          14         802
+-- flagged above the block threshold 0.00638 (0.0001 of honest payments on validation)
+  recall                               0.99374
+  precision                            0.92238
+  false_alarm_rate                     0.00007
+  caught / missed / false alarms         3,173          20         267
+
+Walked 6,362,620 rows in 94s (67,783 rows/s).
+
+Part: valid  (1,293,285 payments, 770 fraud)
+metric                                  replay    notebook
+average precision                      1.00000         nan
+  (float32 inputs, as in notebook)     1.00000
+-- flagged above the review threshold 0.00424 (0.001 of honest payments on validation)
+  recall                               1.00000
+  precision                            0.38442
+  false_alarm_rate                     0.00095
+  caught / missed / false alarms           770           0       1,233
+-- flagged above the block threshold 0.00638 (0.0001 of honest payments on validation)
+  recall                               1.00000
+  precision                            0.91449
+  false_alarm_rate                     0.00006
+  caught / missed / false alarms           770           0          72
+
+Walked 6,362,620 rows in 94s (67,783 rows/s).
+
+Part: test  (1,248,736 payments, 4,250 fraud)
+metric                                  replay    notebook
+average precision                      0.99952     0.99952
+  (float32 inputs, as in notebook)     0.99952
+-- flagged above the review threshold 0.00424 (0.001 of honest payments on validation)
+  recall                               0.99976     0.99976
+  precision                            0.89698     0.89698
+  false_alarm_rate                     0.00039     0.00039
+  caught / missed / false alarms         4,249           1         488
+-- flagged above the block threshold 0.00638 (0.0001 of honest payments on validation)
+  recall                               0.99976     0.99976
+  precision                            0.98493     0.98493
+  false_alarm_rate                     0.00005     0.00005
+  caught / missed / false alarms         4,249           1          65
+
+Walked 6,362,620 rows in 94s (67,783 rows/s).
+wrote docs/results/paysim_replay/replay.json
