@@ -8,7 +8,8 @@ if they do not match, so a retrained model with other columns fails loudly.
 
 Two things the model needs that a live feed does not hand over for free:
 
-* Time. PaySim counts hours ("steps"). The simulator runs one simulated hour per
+* Time. PaySim counts hours ("steps"). A transaction that carries its own `step` (a
+  replay of the PaySim log) uses it. Otherwise the simulator runs one simulated hour per
   second (`SIM_HOUR_MS`), so `hour` cycles every 24 s of wall-clock time.
 * Currency. PaySim amounts are in an unspecified currency, mostly in the tens of
   thousands; the simulator's payments are in the tens. `AMOUNT_SCALE` multiplies every
@@ -69,7 +70,7 @@ class PaymentFeatureStore:
         )  # fmt: skip
 
     def _step(self, tx: Transaction) -> int:
-        return tx.ts // self.sim_hour_ms
+        return tx.step if tx.step is not None else tx.ts // self.sim_hour_ms
 
     def columns(self, tx: Transaction) -> dict[str, float]:
         scale = self.amount_scale

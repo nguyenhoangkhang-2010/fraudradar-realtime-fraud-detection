@@ -27,6 +27,9 @@ class Transaction:
     src_balance: float | None = None  # sender's balance before this payment
     dst_balance: float | None = None  # recipient's balance before this payment
     dst_merchant: bool = False
+    # Hour counter of the source log (PaySim's "step"). When a feed replays a log faster or slower than
+    # real time, `ts` is the wall clock and this is the clock the log itself runs on.
+    step: int | None = None
 
     def to_bytes(self) -> bytes:
         return orjson.dumps(asdict(self))

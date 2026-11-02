@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import json
 import time
 from collections.abc import Iterator
@@ -51,22 +52,27 @@ def find_csv(root: str | Path = ".") -> Path:
     raise FileNotFoundError(f"no PaySim CSV in {', '.join(DEFAULT_LOCATIONS)}; pass --csv")
 
 
-def transactions(path: str | Path, limit: int | None = None) -> Iterator[Transaction]:
-    """PaySim rows as transactions, in file order. `truth` marks fraud and is never read by the model."""
+def transactions(path: str | Path, limit: int | None = None, start: int = 0) -> Iterator[Transaction]:
+    """PaySim rows as transactions, in file order. `truth` marks fraud and is never read by the model.
+
+    `start` skips that many data rows without parsing them (the ids and `limit` still count from the top).
+    """
     with open(path, newline="", encoding="utf-8") as fh:
-        reader = csv.reader(fh)
-        header = next(reader)
+        header = next(csv.reader([fh.readline()]))
+        reader = csv.reader(itertools.islice(fh, start, None))
         missing = [c for c in COLUMNS if c not in header]
         if missing:
             raise ValueError(f"{path} does not look like PaySim: missing columns {missing}")
         i_step, i_type, i_amt, i_src, i_old_src, i_dst, i_old_dst, i_fraud = (header.index(c) for c in COLUMNS)
-        for n, row in enumerate(reader):
+        for n, row in enumerate(reader, start):
             if limit is not None and n >= limit:
                 return
             dst = row[i_dst]
+            step = int(row[i_step])
             yield Transaction(
                 tx_id=f"P{n}",
-                ts=int(row[i_step]) * SIM_HOUR_MS,
+                ts=step * SIM_HOUR_MS,
+                step=step,
                 src=row[i_src],
                 dst=dst,
                 amount=float(row[i_amt]),

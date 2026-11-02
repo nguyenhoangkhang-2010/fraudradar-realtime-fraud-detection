@@ -20,7 +20,8 @@ Requires Docker.
 docker compose up --build
 ```
 
-Open <http://localhost:8000> and press **Launch attack**. To score with the LightGBM model trained on PaySim
+Open <http://localhost:8000> and press **Launch attack**. (To run the map on the real PaySim log instead of the
+simulator, see [Demo on the real PaySim log](#demo-on-the-real-paysim-log).) To score with the LightGBM model trained on PaySim
 instead of the heuristic, see [Serving the PaySim model](#serving-the-paysim-model):
 
 ```bash
@@ -247,6 +248,39 @@ Read it as a check that serving works, not as a verdict on the model:
   LightGBM; the slim Python image lacks it and the scorer crashed on start until the Dockerfile installed it.
 - One prediction runs in the scorer's event loop, one process; throughput under load is not measured.
 
+## Demo on the real PaySim log
+
+The map can run on the rows of the real PaySim file instead of the simulator. With the CSV in `training/data/` (see
+above), and the same Docker setup:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.paysim.yml up -d --build
+```
+
+The simulator publishes the file's rows at 120 per second, starting at the first hour after the model's validation
+part (hour 356), so every payment shown is one the model never trained or tuned on; at the end of the file it loops.
+The scorer uses the LightGBM model, reads the same file to rebuild the history of every earlier row before it scores
+the first one it receives, and resynchronises the same way after a restart. Expect about a minute and a half before
+the first decision: about 20 s to locate the start row and 50 s to read 5.1 million earlier rows, through Docker's
+file sharing on Windows. The scorer then holds about 1 GB of feature state. The header of the page says
+"real PaySim log" so it cannot be mistaken for the simulator.
+
+What is real and what is not:
+
+- **Real:** type, amount, both balances, merchant flag, hour counter and fraud label of every row.
+- **Made up for the map:** where an account is. PaySim has no places, so each account name is hashed to one of the
+  map's places, weighted like the simulator's (about a quarter land in Viet Nam). The same account is always in the
+  same place, but the place means nothing; the arcs and the districts are decoration.
+- **Injected:** the **Launch attack** button adds PaySim-style fraud (14 victim accounts, each swept into a fresh
+  account that then cashes out, labelled `attack-NNN`). It is the pattern the model learned, so the model catches all
+  of it (28 of 28 payments blocked in the runs I did). That shows the pipeline reacting, not detection skill.
+- **Fraud shown in the file** is labelled by the hour it falls in (`paysim-hNNN`), so the incident card and the
+  precision and recall figures count real PaySim fraud together with injected attacks. For real-data numbers use the
+  replay above. Amounts have no currency sign because PaySim's currency is unspecified.
+
+Observed on a laptop with Docker (one broker, one scorer, one process): 120 tx/s sustained, about 7 ms p50 and
+9 to 14 ms p99 from publish to decision once the scorer had caught up. That is one observation, not a load test.
+
 ## Training-serving skew check
 
 A model scores whatever features it is given, so if the stream feeds it values spread differently from the ones
@@ -383,6 +417,7 @@ How to read it:
 - [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
 - [x] Replay the real PaySim log through the serving code and compare with the notebook (see above)
 - [x] Benchmark on real card payments (IEEE-CIS), see above
+- [x] Demo on the real PaySim log (`docker-compose.paysim.yml`)
 - [ ] IEEE-CIS follow-up: windowed history counts instead of running counts, and several seeds/splits
 - [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim); the skew check lists what is off
 - [ ] Load test, with p50/p99 under rising throughput
@@ -406,6 +441,7 @@ src/fraudradar/
   artifacts/     the trained model, its metadata and (once added) reference_stats.json
   skew.py        training-serving skew check
   replay.py      replays the real PaySim log through the serving code
+  paysim_stream.py  the PaySim log as the demo's live traffic
   serving.py     builds the engine for a scorer name
   engine.py      features -> score -> action
   evaluate.py    offline replay and metrics
