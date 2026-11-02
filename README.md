@@ -162,9 +162,42 @@ In the live demo on a laptop (one broker, one scorer, 120 tx/s) the UI showed
 end-to-end latency of about 7 ms p50 and 10 to 17 ms p99, event time to
 decision. That is an observation, not a load test.
 
+## Model results on PaySim
+
+A LightGBM model trained with `training/paysim_lightgbm.ipynb` on the
+[PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1) dataset (6,362,620 payments over 743 hours). The split is
+by time: train on hours 1-281, choose the alert threshold on hours 282-355, report on the untouched hours 356-743.
+Everything below is the **test** part; the raw numbers are in [docs/results/paysim_v1](docs/results/paysim_v1).
+
+| Model | Average precision | Fraud caught | Alerts that are fraud | Honest payments flagged |
+|---|---|---|---|---|
+| Logistic regression | 0.638 | 63.2% | 66.2% | 0.110% |
+| LightGBM, payment features only (A) | 0.9995 | 99.98% | 71.0% | 0.139% |
+| LightGBM, A + history (A+B) | 0.9985 | 99.7% | 88.2% | 0.046% |
+| **LightGBM, all features (A+B+C)** | **0.9995** | **99.98%** | **89.7%** | **0.039%** |
+
+"Fraud caught", "alerts that are fraud" and "honest payments flagged" are measured with the threshold set on the
+validation part so that about 0.1% of honest payments are flagged. The last column shows what that threshold
+actually did on the test part, which is why the rows are not comparable on precision alone. One prediction takes
+about 1.8 ms (p99 6 ms) on a Kaggle CPU notebook, one process; that is not a load test.
+
+How to read this honestly:
+
+- **PaySim is easy.** The two strongest signals are "this payment empties the sender's account" and the ratio of the
+  amount to the balance. That is the rule the PaySim simulator uses to create fraud, so a model that sees only the
+  payment is already near-perfect. The score shows the pipeline and the split are sound; it says little about
+  real-world fraud.
+- **The history and chain features added nothing measurable.** The chain features never fire on PaySim (their SHAP
+  value is zero), and the AP differences between A, A+B and A+B+C are about 0.001. That is from one seed and one
+  split, so treat it as noise, not as evidence that any group helps or hurts.
+- **Precision is not comparable across rows.** Each row's threshold flagged a different share of honest payments
+  on the test part (last column).
+- The PaySim fraud rate (about 0.13%) is a property of the simulation.
+
 ## Roadmap
 
-- [ ] Train a LightGBM model on labeled replays and replace `HeuristicScorer` (same interface)
+- [x] Train a LightGBM model on PaySim and report it honestly (see above)
+- [ ] Serve that model in the scorer in place of `HeuristicScorer`
 - [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
 - [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim)
 - [ ] Load test, with p50/p99 under rising throughput
