@@ -54,6 +54,26 @@ Outputs go to `work/`, which is git-ignored. Do not commit datasets or trained m
 | Average precision and recall at a fixed false-alarm rate | Accuracy is meaningless at about 0.1% fraud. |
 | Threshold chosen on the validation part | The test part must stay untouched until the end. |
 
+## Real card payments: IEEE-CIS
+
+[`ieee_cis_lightgbm.ipynb`](ieee_cis_lightgbm.ipynb) is the real-data counterpart of the PaySim notebook: about 590,000
+anonymised online card payments (3.5% fraud) from the [IEEE-CIS Fraud Detection](https://www.kaggle.com/competitions/ieee-fraud-detection)
+competition. It uses only `train_transaction.csv` and `train_identity.csv`, because only they have labels, and makes its
+own time-ordered train / validation / test split from them. It is a benchmark, not something the scorer serves: the data
+has no account balances or account numbers, so it is a different model from the PaySim one.
+
+1. Join the competition once (<https://www.kaggle.com/competitions/ieee-fraud-detection> > **Join Competition**, accept
+   the rules). Without that, Kaggle will not attach the data.
+2. New Kaggle notebook > **File > Import Notebook** > upload `ieee_cis_lightgbm.ipynb`.
+3. **Add Input > Competition Datasets** > `IEEE-CIS Fraud Detection`. Keep the accelerator on **None**.
+4. Run from the top with `QUICK = True`, then set it to `False` for the real run (it takes longer than PaySim:
+   expect tens of minutes; set `ABLATION = False` to train only one LightGBM model).
+5. The last cell writes `/kaggle/working/ieee_cis_results.zip` and shows a download link. Unzip it into
+   `docs/results/ieee_cis_v1/`; the model file there is not committed. The notebook committed here still holds the
+   outputs of the full run (`QUICK = False`) that produced the published numbers.
+
+On your own machine, put the two CSVs in `training/data/ieee/` (git-ignored) or set `IEEE_DIR`, and run the notebook.
+
 ## Reading the results honestly
 
 PaySim is itself a simulation, built from a sample of real mobile-money logs. A good score here shows the

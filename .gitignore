@@ -27,3 +27,6 @@ work/
 /training/fraud_model_paysim/
 /training/*.zip
 /training/archive/
+/docs/results/ieee_cis_v1/lgbm_ieee_cis.txt
+/docs/results/ieee_cis_v1/*.zip
+/training/ieee_cis_results/
