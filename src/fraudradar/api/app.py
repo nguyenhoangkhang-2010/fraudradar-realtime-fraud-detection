@@ -130,7 +130,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)  # the GeoJSON files are s
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"ok": True}
+    return {"ok": True, "source": app.state.settings.data_source}
 
 
 @app.get("/api/cities")

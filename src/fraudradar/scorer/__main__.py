@@ -1,4 +1,9 @@
-"""Consumes transactions, scores them in order, publishes decisions."""
+"""Consumes transactions, scores them in order, publishes decisions.
+
+With `DATA_SOURCE=paysim` the stream is the real PaySim log. The model's history features count every
+earlier row, so when the scorer receives row `n` for the first time (or after a restart, a gap, or the
+file looping) it first reads the file up to `n` into a fresh feature state, then carries on.
+"""
 
 from __future__ import annotations
 
@@ -20,10 +25,27 @@ log = logging.getLogger("scorer")
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = Settings.from_env()
-    engine = build_engine(settings.scorer, settings.block_threshold, settings.review_threshold)
+    replay_csv = None
+    if settings.data_source == "paysim":
+        if settings.scorer != "lightgbm":
+            raise SystemExit("DATA_SOURCE=paysim needs SCORER=lightgbm: the heuristic reads device and account age, which PaySim lacks")
+        from ..paysim_stream import resolve_csv, warm_up
+
+        replay_csv = resolve_csv(settings.paysim_csv)
+        log.info("replaying the real PaySim log from %s", replay_csv)
+
+    def new_engine():
+        # PaySim amounts are already in the model's units, so they are not rescaled
+        return build_engine(
+            settings.scorer, settings.block_threshold, settings.review_threshold,
+            amount_scale=1.0 if replay_csv else None,
+        )
+
+    engine = new_engine()
+    expected_row: int | None = None  # index of the next PaySim row the scorer expects
     log.info(
-        "scorer=%s block>=%g review>=%g",
-        settings.scorer, engine.block_threshold, engine.review_threshold,
+        "scorer=%s source=%s block>=%g review>=%g",
+        settings.scorer, settings.data_source, engine.block_threshold, engine.review_threshold,
     )
 
     consumer = await start_with_retry(
@@ -48,6 +70,17 @@ async def main() -> None:
             for messages in batch.values():
                 for msg in messages:
                     tx = Transaction.from_bytes(msg.value)
+                    if replay_csv and tx.tx_id.startswith("P"):  # rows of the file; injected attacks start with "A"
+                        row = int(tx.tx_id[1:])
+                        if row != expected_row:
+                            if expected_row is not None:
+                                engine = None  # free the old state before building the next
+                                engine = new_engine()
+                            log.info("syncing to PaySim row %d: reading the file up to there", row)
+                            started = time.monotonic()
+                            folded = await asyncio.to_thread(warm_up, engine, replay_csv, row)  # keeps heartbeats alive
+                            log.info("synced: %d earlier rows in %.0f s", folded, time.monotonic() - started)
+                        expected_row = row + 1
                     decision = engine.handle(tx, now_ms=int(time.time() * 1000))
                     await producer.send(settings.topic_decisions, decision.to_bytes())
                     handled += 1

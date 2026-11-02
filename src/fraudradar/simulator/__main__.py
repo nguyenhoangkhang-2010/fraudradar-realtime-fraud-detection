@@ -1,5 +1,7 @@
 """Publishes synthetic transactions to Kafka and reacts to control commands.
 
+With `DATA_SOURCE=paysim` the legitimate traffic is the rows of the real PaySim file (see `paysim_stream`).
+
 Control commands (topic `control`, JSON):
     {"type": "attack", "size": 14}   launch a fraud ring
     {"type": "rate", "tps": 300}     change the legitimate traffic rate
@@ -60,7 +62,16 @@ async def _control_loop(
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = Settings.from_env()
-    gen = TransactionGenerator(seed=settings.seed, n_accounts=settings.n_accounts)
+    if settings.data_source == "paysim":
+        from ..paysim_stream import PaysimSource
+
+        gen = PaysimSource(settings.paysim_csv, settings.paysim_start_step, seed=settings.seed)
+        log.info(
+            "streaming the real PaySim log from %s, hour %d (row %d)",
+            gen.csv, gen.start_step, gen.start_index,
+        )
+    else:
+        gen = TransactionGenerator(seed=settings.seed, n_accounts=settings.n_accounts)
     state = _State(tps=settings.tps)
     scheduled: list = []
 

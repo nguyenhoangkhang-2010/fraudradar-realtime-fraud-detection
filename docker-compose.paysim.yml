@@ -1,0 +1,28 @@
+# Replay the real PaySim log instead of the synthetic simulator:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.paysim.yml up -d --build
+#
+# Needs the PaySim CSV in ./training/data (see README). The scorer reads the file too, to rebuild the history of
+# every earlier row before it scores the first one it receives, so it takes a minute or two to become ready.
+x-paysim: &paysim
+  DATA_SOURCE: paysim
+  PAYSIM_CSV: /data
+  SIM_TPS: "120"
+
+services:
+  simulator:
+    environment:
+      <<: *paysim
+    volumes:
+      - ./training/data:/data:ro
+
+  scorer:
+    environment:
+      <<: *paysim
+      SCORER: lightgbm
+    volumes:
+      - ./training/data:/data:ro
+
+  api:
+    environment:
+      DATA_SOURCE: paysim

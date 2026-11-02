@@ -1,6 +1,6 @@
 (() => {
   const $ = (id) => document.getElementById(id);
-  const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  let usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
   const num = new Intl.NumberFormat("en-US");
   const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
@@ -91,6 +91,18 @@
     const [[a, b], [c, d]] = boundsOf(geom, true);
     return [(a + c) / 2, (b + d) / 2];
   };
+
+  // Say where the payments come from, so a replay of real data is never mistaken for the simulator.
+  fetch("/api/health").then((r) => r.json()).then((h) => {
+    const tag = document.querySelector(".brand small");
+    if (h.source !== "paysim") return;
+    if (tag) tag.textContent = "real PaySim log · places assigned";
+    usd = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });  // PaySim's currency is unspecified: no $ sign
+    const credits = document.getElementById("credits");
+    if (credits) credits.textContent = credits.textContent.replace(
+      "Locations and traffic are simulated.",
+      "Payments are the real PaySim log (itself a simulation); places are assigned from account names; attacks are injected.");
+  }).catch(() => {});
 
   // ---------- data ----------
   async function loadData() {
