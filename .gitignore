@@ -11,3 +11,4 @@ dist/
 # training inputs and outputs: link datasets in the README instead of committing them
 /training/data/
 /models/
+.vscode/
