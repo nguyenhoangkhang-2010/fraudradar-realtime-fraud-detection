@@ -3,14 +3,66 @@
 [![CI](https://github.com/nguyenhoangkhang-2010/fraudradar-realtime-fraud-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/nguyenhoangkhang-2010/fraudradar-realtime-fraud-detection/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A real-time fraud detection command center. Synthetic payments stream through
-Kafka, get scored one by one with streaming features, and show up on a live
-map and account graph. A button launches a fraud ring so you can watch the
-system find it.
+A real-time fraud detection system, built end to end: payments stream through Kafka, are scored one at a time with
+point-in-time streaming features and a LightGBM model, and show up on a live map you can drill into from the world
+down to a city's districts. A button injects a fraud ring so you can watch the system find it.
 
-> **Status: working scaffold.** The streaming path, feature logic, tests and UI
-> run end to end. The scorer is a hand-weighted heuristic by default, or a
-> LightGBM model trained on PaySim (`SCORER=lightgbm`); its state lives in memory. See [Roadmap](#roadmap) for what is deliberately not done yet.
+![A fraud ring is detected and contained on the live map](docs/img/attack.gif)
+
+*The real PaySim log streaming through the system while an injected attack is blocked. PaySim has no locations, so
+places are assigned from account names; the map is decoration, the scores are not.*
+
+## What this demonstrates
+
+- **A streaming ML system, not a notebook.** Redpanda (Kafka) feeds a scorer that builds features from the state
+  *before* each payment, scores with LightGBM, and publishes decisions; a FastAPI gateway pushes them over
+  WebSocket to the map. About 7 ms from event to decision at 120 tx/s on a laptop (one observation, not a load test).
+- **Evaluation that checks itself.** The same model is measured on a simulation and on real data, and the two
+  results are reported side by side, with the weaknesses written next to them.
+
+  | | PaySim (simulated payments, real log) | IEEE-CIS (real card payments) |
+  |---|---|---|
+  | Test payments / fraud | 1,248,736 / 4,250 | 118,108 / 4,064 |
+  | Average precision | 0.9995 | 0.51 |
+  | ROC AUC | about 1.0 | 0.90 |
+  | Fraud caught at the validation-chosen threshold | 99.98% at 0.039% false alarms | 44% at 1.3% false alarms |
+
+  The gap is the point: PaySim's fraud follows a rule the simulator wrote. Details in
+  [Model results on PaySim](#model-results-on-paysim) and [Real card payments: IEEE-CIS](#real-card-payments-ieee-cis).
+- **Training and serving agree.** The serving code, fed one payment at a time, reproduces the notebook's test metrics
+  to the digits shown ([replay](#replaying-the-real-paysim-log)), and the live Kafka pipeline gave the same number of
+  false blocks as the offline replay on the same rows.
+- **Bugs found by testing against reality**, each fixed and written up: a simulator whose honest traffic looked
+  nothing like the training data ([skew check](#training-serving-skew-check)), a model file LightGBM could not read
+  after Git rewrote its line endings, and a Docker image missing a system library.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  sim["simulator<br/>synthetic traffic or the PaySim log,<br/>plus injected attacks"]
+  tx[("transactions")]
+  sc["scorer<br/>point-in-time features<br/>LightGBM or heuristic"]
+  dec[("decisions")]
+  api["api<br/>FastAPI + WebSocket<br/>rolling metrics"]
+  ui["browser<br/>MapLibre map + account graph"]
+  ctl[("control")]
+  sim --> tx --> sc --> dec --> api --> ui
+  ui -- "Launch attack" --> api
+  api --> ctl --> sim
+```
+
+## Screenshots
+
+| | |
+|---|---|
+| ![The live map, calm](docs/img/map-calm.png) | ![An incident detected and blocked](docs/img/incident.jpg) |
+| Traffic arcs on the world map, nothing flagged. | The camera follows the money to the mule account, down to the district. |
+| ![Ring contained](docs/img/ring-contained.jpg) | |
+| 28 of 28 payments of the injected ring blocked. | |
+
+> **Status:** works end to end (streaming path, features, model serving, tests, UI, CI). Feature state lives in the
+> scorer's memory, so there is one scorer replica for now; see [Roadmap](#roadmap) for what is deliberately not done.
 
 ## Run it
 
@@ -280,6 +332,12 @@ What is real and what is not:
 
 Observed on a laptop with Docker (one broker, one scorer, one process): 120 tx/s sustained, about 7 ms p50 and
 9 to 14 ms p99 from publish to decision once the scorer had caught up. That is one observation, not a load test.
+
+**Live matches offline.** After the demo had streamed about 464,000 rows it showed 99 false blocks; the offline
+replay over the first 460,000 to 475,000 rows of the same file gives 99 as well. So the Kafka pipeline, the cold-start
+sync and the feature store add nothing and lose nothing compared with the replay. That stretch of the file has a
+higher false-block rate (0.021%) than the test part as a whole (0.0052%), because the rate varies over the log;
+that is the data, not a fault of the pipeline.
 
 ## Training-serving skew check
 
