@@ -1,5 +1,8 @@
 # FraudRadar
 
+[![CI](https://github.com/nguyenhoangkhang-2010/fraudradar-realtime-fraud-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/nguyenhoangkhang-2010/fraudradar-realtime-fraud-detection/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A real-time fraud detection command center. Synthetic payments stream through
 Kafka, get scored one by one with streaming features, and show up on a live
 map and account graph. A button launches a fraud ring so you can watch the
@@ -186,3 +189,8 @@ src/fraudradar/
   api/           FastAPI, WebSocket hub, metrics, static UI (map, fonts)
 tests/
 ```
+
+## Licence
+
+The code is released under the [MIT licence](LICENSE). The map data and the label font keep their own
+licences, listed under [Geography](#geography); the sources must be credited as described there.
