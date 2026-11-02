@@ -13,8 +13,9 @@ class Settings:
     tps: float
     n_accounts: int
     seed: int
-    block_threshold: float
-    review_threshold: float
+    scorer: str  # "heuristic" or "lightgbm"
+    block_threshold: float | None  # None: the scorer's own default
+    review_threshold: float | None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -27,6 +28,7 @@ class Settings:
             tps=float(env("SIM_TPS", "120")),
             n_accounts=int(env("SIM_ACCOUNTS", "2000")),
             seed=int(env("SIM_SEED", "7")),
-            block_threshold=float(env("BLOCK_THRESHOLD", "0.85")),
-            review_threshold=float(env("REVIEW_THRESHOLD", "0.5")),
+            scorer=env("SCORER", "heuristic"),
+            block_threshold=float(env("BLOCK_THRESHOLD")) if env("BLOCK_THRESHOLD") else None,
+            review_threshold=float(env("REVIEW_THRESHOLD")) if env("REVIEW_THRESHOLD") else None,
         )

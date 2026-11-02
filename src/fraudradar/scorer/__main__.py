@@ -10,11 +10,9 @@ import time
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from ..config import Settings
-from ..engine import ScoringEngine
-from ..features import FeatureStore
 from ..kafka_util import start_with_retry
-from ..model import HeuristicScorer
 from ..schemas import Transaction
+from ..serving import build_engine
 
 log = logging.getLogger("scorer")
 
@@ -22,11 +20,10 @@ log = logging.getLogger("scorer")
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = Settings.from_env()
-    engine = ScoringEngine(
-        FeatureStore(),
-        HeuristicScorer(),
-        block_threshold=settings.block_threshold,
-        review_threshold=settings.review_threshold,
+    engine = build_engine(settings.scorer, settings.block_threshold, settings.review_threshold)
+    log.info(
+        "scorer=%s block>=%g review>=%g",
+        settings.scorer, engine.block_threshold, engine.review_threshold,
     )
 
     consumer = await start_with_retry(
