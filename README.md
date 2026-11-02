@@ -330,12 +330,56 @@ Raw output: [docs/results/paysim_replay](docs/results/paysim_replay). What this 
   about 25,000 rows/s with a median of 0.04 ms and a p99 of 0.10 ms per payment. Those are early rows with almost no
   fraud, so few of them paid for the explanation step; it is not a load test and leaves out Kafka.
 
+## Real card payments: IEEE-CIS
+
+PaySim is a simulation, so its near-perfect score says little about real fraud. To see what the same method gets on
+payments where nobody wrote the fraud rule, `training/ieee_cis_lightgbm.ipynb` trains and tests a LightGBM model on the
+[IEEE-CIS Fraud Detection](https://www.kaggle.com/competitions/ieee-fraud-detection) data: 590,540 real, anonymised
+online card payments from Vesta, 3.5% fraud, over 182 days. It uses only the two labelled training files and makes its
+own split by time: train on days 0-100, choose the early-stopping point and thresholds on days 100-140, and report on
+days 140-182 (118,108 payments, 4,064 fraud), which the model never saw. The data is not in the repo; the notebook's
+`metadata.json` has the SHA-256 of both files. Raw results: [docs/results/ieee_cis_v1](docs/results/ieee_cis_v1).
+
+| Model (test part) | Average precision | ROC AUC | Fraud caught at about 5% false alarms | Alerts that are fraud | Fraud caught at about 1% false alarms | Alerts that are fraud |
+|---|---|---|---|---|---|---|
+| Random guessing | 0.034 | 0.5 | | | | |
+| Logistic regression | 0.165 | 0.796 | 50.7% | 18.4% | 31.6% | 28.5% |
+| LightGBM, payment columns (A) | 0.516 | 0.895 | 63.1% | 29.1% | 45.3% | 56.9% |
+| LightGBM, A + proxy-account history (B) | 0.508 | 0.900 | 63.4% | 29.5% | 44.1% | 55.4% |
+
+Next to PaySim, where the same method scores AP 0.9995, the real data gives AP about 0.51 and ROC AUC about 0.90. At a
+budget of about 1 honest payment in 100 flagged, the model catches under half of the fraud and about 4 in 10 alerts are
+wrong. That gap is the point: it measures how much of PaySim's score came from the simulator's rule.
+
+How to read it:
+
+- **The history features did not help.** AP is 0.009 lower and ROC AUC 0.005 higher with them: one split and one seed,
+  so no difference. There is also a warning sign. `email_prior_n`, a running count of earlier payments per email
+  domain, is the model's third most important feature by gain (3.3%). A running count only ever grows, so it may be
+  acting as a clock rather than as behaviour, and for common domains its test-period values are, by construction,
+  larger than any seen in training. A count over a recent window would be the fair version; it has not been run.
+- **The "accounts" are a guess.** The data has no account number, so payments sharing `card1, card2, card3, card5` and
+  `addr1` are treated as one account (42,946 of them). That is an assumption, not a fact.
+- **The validation figure is optimistic.** The model was stopped (762 rounds) and the thresholds were chosen on the
+  validation part, where its AP is 0.63. The test AP of 0.51 is the honest number. The thresholds set for 5% and 1% false
+  alarms gave 5.4% and 1.3% on the test part, a mild shift.
+- **No decay showed up within 70 days.** Scored on four successive slices of the test period, ROC AUC stays between
+  0.890 and 0.904. AP rises from 0.45 to 0.56, but AP depends on the fraud rate (2.9% to 4.1% across slices) and each
+  slice has only about 1,000 fraud cases, so read it as noisy, not as improvement.
+- **The linear baseline did not converge** in 200 iterations, so its row is a loose lower bound.
+- **Many inputs cannot be explained.** The anonymised `V` columns hold 37% of the gain, and the two most important
+  features are `V258` and `V257`.
+- **This is not a leaderboard number.** The competition scored a different, later, unlabelled period, and its top
+  entries used far more feature engineering.
+
 ## Roadmap
 
 - [x] Train a LightGBM model on PaySim and report it honestly (see above)
 - [x] Serve that model in the scorer in place of `HeuristicScorer` (opt in with `SCORER=lightgbm`)
 - [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
 - [x] Replay the real PaySim log through the serving code and compare with the notebook (see above)
+- [x] Benchmark on real card payments (IEEE-CIS), see above
+- [ ] IEEE-CIS follow-up: windowed history counts instead of running counts, and several seeds/splits
 - [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim); the skew check lists what is off
 - [ ] Load test, with p50/p99 under rising throughput
 - [ ] Drift detection and automatic retraining when attackers change tactics
