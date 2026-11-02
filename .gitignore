@@ -12,3 +12,10 @@ dist/
 /training/data/
 /models/
 .vscode/
+
+# local tooling
+.venv-train/
+.ipynb_checkpoints/
+.idea/
+.DS_Store
+*.log
