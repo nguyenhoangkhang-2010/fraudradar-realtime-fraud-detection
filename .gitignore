@@ -19,3 +19,10 @@ dist/
 .idea/
 .DS_Store
 *.log
+
+# notebook runs outside Colab write here
+work/
+
+# raw notebook outputs: the small result files live in docs/results/, the model is added deliberately
+/training/fraud_model_paysim/
+/training/*.zip
