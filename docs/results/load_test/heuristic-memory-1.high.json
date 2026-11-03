@@ -1,0 +1,111 @@
+{
+ "source": "synthetic",
+ "duration_s": 6,
+ "rates": [
+  12000,
+  16000,
+  24000
+ ],
+ "steps": [
+  {
+   "target_rate": 12000,
+   "sent": 72000,
+   "sent_rate": 11992.3,
+   "decided": 72000,
+   "lost": 0,
+   "decided_in_window_rate": 11987.3,
+   "e2e_ms": {
+    "p50": 6,
+    "p90": 9,
+    "p99": 14,
+    "p999": 55,
+    "max": 59
+   },
+   "to_decision_ms": {
+    "p50": 3,
+    "p99": 11
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693554391,
+    1793693560395
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     59.0
+    ],
+    "redis": null,
+    "redpanda": 18.0
+   }
+  },
+  {
+   "target_rate": 16000,
+   "sent": 96000,
+   "sent_rate": 15987.0,
+   "decided": 96000,
+   "lost": 0,
+   "decided_in_window_rate": 15974.2,
+   "e2e_ms": {
+    "p50": 6,
+    "p90": 7,
+    "p99": 13,
+    "p999": 17,
+    "max": 20
+   },
+   "to_decision_ms": {
+    "p50": 3,
+    "p99": 10
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693562920,
+    1793693568925
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     85.0
+    ],
+    "redis": null,
+    "redpanda": 23.0
+   }
+  },
+  {
+   "target_rate": 24000,
+   "sent": 144000,
+   "sent_rate": 23978.5,
+   "decided": 144000,
+   "lost": 0,
+   "decided_in_window_rate": 16705.0,
+   "e2e_ms": {
+    "p50": 1059,
+    "p90": 2792,
+    "p99": 3148,
+    "p999": 3176,
+    "max": 3184
+   },
+   "to_decision_ms": {
+    "p50": 1057,
+    "p99": 3146
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693571460,
+    1793693577466
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     92.0
+    ],
+    "redis": null,
+    "redpanda": 24.0
+   }
+  }
+ ],
+ "name": "heuristic-memory-1",
+ "what": "hand-weighted heuristic, state in the scorer's memory, 1 scorer (synthetic payments)",
+ "scorers": 1,
+ "partitions": 1,
+ "memory_mib_max": {
+  "fraudradar-scorer-1": 43.5
+ }
+}

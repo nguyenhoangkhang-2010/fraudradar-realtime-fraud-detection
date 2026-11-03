@@ -1,0 +1,103 @@
+{
+ "csv": "PS_20174392719_1491204439457_log.csv",
+ "rows_walked": 6362620,
+ "results": [
+  {
+   "part": "train",
+   "payments": 3820599,
+   "fraud": 3193,
+   "average_precision": 0.9961464703614303,
+   "average_precision_float32": 0.9961464703423603,
+   "at_threshold": {
+    "fpr_0.001": {
+     "recall": 0.9956154087065455,
+     "precision": 0.7985430796282341,
+     "false_alarm_rate": 0.0002100903073972221,
+     "caught": 3179,
+     "missed": 14,
+     "false_alarms": 802
+    },
+    "fpr_0.0001": {
+     "recall": 0.993736298152208,
+     "precision": 0.9223837209302326,
+     "false_alarm_rate": 6.994278313598292e-05,
+     "caught": 3173,
+     "missed": 20,
+     "false_alarms": 267
+    }
+   },
+   "thresholds": {
+    "fpr_0.001": 0.004236514046430132,
+    "fpr_0.0001": 0.0063785377398281875
+   }
+  },
+  {
+   "part": "valid",
+   "payments": 1293285,
+   "fraud": 770,
+   "average_precision": 1.0,
+   "average_precision_float32": 1.0,
+   "at_threshold": {
+    "fpr_0.001": {
+     "recall": 1.0,
+     "precision": 0.3844233649525711,
+     "false_alarm_rate": 0.0009539541127182277,
+     "caught": 770,
+     "missed": 0,
+     "false_alarms": 1233
+    },
+    "fpr_0.0001": {
+     "recall": 1.0,
+     "precision": 0.9144893111638955,
+     "false_alarm_rate": 5.570534964777972e-05,
+     "caught": 770,
+     "missed": 0,
+     "false_alarms": 72
+    }
+   },
+   "thresholds": {
+    "fpr_0.001": 0.004236514046430132,
+    "fpr_0.0001": 0.0063785377398281875
+   }
+  },
+  {
+   "part": "test",
+   "payments": 1248736,
+   "fraud": 4250,
+   "average_precision": 0.9995205955581442,
+   "average_precision_float32": 0.9995205955581442,
+   "at_threshold": {
+    "fpr_0.001": {
+     "recall": 0.9997647058823529,
+     "precision": 0.8969812117373865,
+     "false_alarm_rate": 0.0003921297628097062,
+     "caught": 4249,
+     "missed": 1,
+     "false_alarms": 488
+    },
+    "fpr_0.0001": {
+     "recall": 0.9997647058823529,
+     "precision": 0.9849327770050996,
+     "false_alarm_rate": 5.223039873489939e-05,
+     "caught": 4249,
+     "missed": 1,
+     "false_alarms": 65
+    }
+   },
+   "thresholds": {
+    "fpr_0.001": 0.004236514046430132,
+    "fpr_0.0001": 0.0063785377398281875
+   },
+   "notebook": {
+    "AP": 0.9995205955581442,
+    "ROC_AUC": 0.9999934861839015,
+    "recall@0.001": 0.9997647058823529,
+    "precision@0.001": 0.8969812117373865,
+    "false_alarm_rate@0.001": 0.0003921297628097062,
+    "recall@0.0001": 0.9997647058823529,
+    "precision@0.0001": 0.9849327770050996,
+    "false_alarm_rate@0.0001": 5.223039873489939e-05
+   }
+  }
+ ]
+}

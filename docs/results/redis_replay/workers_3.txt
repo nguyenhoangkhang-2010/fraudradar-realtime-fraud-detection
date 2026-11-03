@@ -1,0 +1,19 @@
+Replaying training\data\PS_20174392719_1491204439457_log.csv (test) ...
+
+Part: test  (1,248,736 payments, 4,250 fraud)
+metric                                  replay    notebook
+average precision                      0.99952     0.99952
+  (float32 inputs, as in notebook)     0.99952
+-- flagged above the review threshold 0.00424 (0.001 of honest payments on validation)
+  recall                               0.99976     0.99976
+  precision                            0.89755     0.89698
+  false_alarm_rate                     0.00039     0.00039
+  caught / missed / false alarms         4,249           1         485
+-- flagged above the block threshold 0.00638 (0.0001 of honest payments on validation)
+  recall                               0.99976     0.99976
+  precision                            0.98493     0.98493
+  false_alarm_rate                     0.00005     0.00005
+  caught / missed / false alarms         4,249           1          65
+
+Walked 6,362,620 rows in 207s (30,691 rows/s).
+wrote docs/results/redis_replay/workers_3.json

@@ -1,0 +1,45 @@
+{
+ "csv": "PS_20174392719_1491204439457_log.csv",
+ "rows_walked": 6362620,
+ "results": [
+  {
+   "part": "test",
+   "payments": 1248736,
+   "fraud": 4250,
+   "average_precision": 0.9995205955581442,
+   "average_precision_float32": 0.9995205955581442,
+   "at_threshold": {
+    "fpr_0.001": {
+     "recall": 0.9997647058823529,
+     "precision": 0.8969812117373865,
+     "false_alarm_rate": 0.0003921297628097062,
+     "caught": 4249,
+     "missed": 1,
+     "false_alarms": 488
+    },
+    "fpr_0.0001": {
+     "recall": 0.9997647058823529,
+     "precision": 0.9849327770050996,
+     "false_alarm_rate": 5.223039873489939e-05,
+     "caught": 4249,
+     "missed": 1,
+     "false_alarms": 65
+    }
+   },
+   "thresholds": {
+    "fpr_0.001": 0.004236514046430132,
+    "fpr_0.0001": 0.0063785377398281875
+   },
+   "notebook": {
+    "AP": 0.9995205955581442,
+    "ROC_AUC": 0.9999934861839015,
+    "recall@0.001": 0.9997647058823529,
+    "precision@0.001": 0.8969812117373865,
+    "false_alarm_rate@0.001": 0.0003921297628097062,
+    "recall@0.0001": 0.9997647058823529,
+    "precision@0.0001": 0.9849327770050996,
+    "false_alarm_rate@0.0001": 5.223039873489939e-05
+   }
+  }
+ ]
+}

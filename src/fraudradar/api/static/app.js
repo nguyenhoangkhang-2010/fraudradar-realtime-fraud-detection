@@ -1,6 +1,6 @@
 (() => {
   const $ = (id) => document.getElementById(id);
-  const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  let usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
   const num = new Intl.NumberFormat("en-US");
   const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
@@ -91,6 +91,18 @@
     const [[a, b], [c, d]] = boundsOf(geom, true);
     return [(a + c) / 2, (b + d) / 2];
   };
+
+  // Say where the payments come from, so a replay of real data is never mistaken for the simulator.
+  fetch("/api/health").then((r) => r.json()).then((h) => {
+    const tag = document.querySelector(".brand small");
+    if (h.source !== "paysim") return;
+    if (tag) tag.textContent = "real PaySim log · places assigned";
+    usd = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });  // PaySim's currency is unspecified: no $ sign
+    const credits = document.getElementById("credits");
+    if (credits) credits.textContent = credits.textContent.replace(
+      "Locations and traffic are simulated.",
+      "Payments are the real PaySim log (itself a simulation); places are assigned from account names; attacks are injected.");
+  }).catch(() => {});
 
   // ---------- data ----------
   async function loadData() {
@@ -984,6 +996,17 @@
     $("k-pr").textContent = `${pct(s.precision)} / ${pct(s.recall)}`;
   }
 
+  // Model health from the scorers' drift monitors: hidden until one reports (the heuristic scorer has none).
+  const HEALTH_LABEL = { ok: "model healthy", watch: "model: watch inputs", drift: "model drifting", "warming up": "model: warming up" };
+  function renderHealth(m) {
+    const el = $("health");
+    if (!m) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = `${m.models.join(", ")} · ${HEALTH_LABEL[m.status] || m.status}`;
+    el.className = "conn " + (m.status === "ok" ? "on" : m.status === "drift" ? "bad" : "off");
+    el.title = m.reasons.length ? m.reasons.join("; ") : "inputs and flag rate look like the training data";
+  }
+
   function connect() {
     const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
     ws.onopen = () => { $("conn").textContent = "live"; $("conn").className = "conn on"; };
@@ -996,6 +1019,7 @@
       if (msg.type !== "tick") return;
       const now = performance.now();
       renderKpis(msg.stats);
+      renderHealth(msg.model);
       onScenario(msg, now); // first, so a new incident clears the network before this tick's items land in it
       for (const it of msg.items) addArc(it, now);
       graphIngest(msg.items, now);

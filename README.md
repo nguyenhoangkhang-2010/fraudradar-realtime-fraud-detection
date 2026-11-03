@@ -1,13 +1,82 @@
 # FraudRadar
 
-A real-time fraud detection command center. Synthetic payments stream through
-Kafka, get scored one by one with streaming features, and show up on a live
-map and account graph. A button launches a fraud ring so you can watch the
-system find it.
+[![CI](https://github.com/nguyenhoangkhang-2010/fraudradar-realtime-fraud-detection/actions/workflows/ci.yml/badge.svg)](https://github.com/nguyenhoangkhang-2010/fraudradar-realtime-fraud-detection/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> **Status: working scaffold.** The streaming path, feature logic, tests and UI
-> run end to end. The scorer is still a hand-weighted heuristic and its state
-> lives in memory. See [Roadmap](#roadmap) for what is deliberately not done yet.
+A real-time fraud detection system, built end to end: payments stream through Kafka, are scored one at a time with
+point-in-time streaming features and a LightGBM model, and show up on a live map you can drill into from the world
+down to a city's districts. A button injects a fraud ring so you can watch the system find it.
+
+Tiếng Việt: [README.vi.md](README.vi.md)
+
+Write-up: [Six times my fraud detector's numbers were wrong](docs/blog/building-fraudradar.md), what each check against reality found.
+
+![A fraud ring is detected and contained on the live map](docs/img/attack.gif)
+
+*The real PaySim log streaming through the system while an injected attack is blocked. PaySim has no locations, so
+places are assigned from account names; the map is decoration, the scores are not.*
+
+## What this demonstrates
+
+- **A streaming ML system, not a notebook.** Redpanda (Kafka) feeds a scorer that builds features from the state
+  *before* each payment, scores with LightGBM, and publishes decisions; a FastAPI gateway pushes them over
+  WebSocket to the map. About 7 ms from event to decision at 120 tx/s on a laptop; in the [load test](#load-test) one
+  scorer kept up with 12,000 to 16,000 payments a second and three with at least 24,000 (one machine, so a comparison of the pieces,
+  not a cluster figure).
+- **Evaluation that checks itself.** The same model is measured on a simulation and on real data, and the two
+  results are reported side by side, with the weaknesses written next to them.
+
+  | | PaySim (simulated payments, real log) | IEEE-CIS (real card payments) |
+  |---|---|---|
+  | Test payments / fraud | 1,248,736 / 4,250 | 118,108 / 4,064 |
+  | Average precision | 0.9995 | 0.51 |
+  | ROC AUC | about 1.0 | 0.90 |
+  | Fraud caught at the validation-chosen threshold | 99.98% at 0.039% false alarms | 44% at 1.3% false alarms |
+
+  The gap is the point: PaySim's fraud follows a rule the simulator wrote. Details in
+  [Model results on PaySim](#model-results-on-paysim) and [Real card payments: IEEE-CIS](#real-card-payments-ieee-cis).
+- **Training and serving agree.** The serving code, fed one payment at a time, reproduces the notebook's test metrics
+  to the digits shown ([replay](#replaying-the-real-paysim-log)), and the live Kafka pipeline gave the same number of
+  false blocks as the offline replay on the same rows.
+- **It notices when the model goes stale and replaces it without a restart.** Each scorer watches its own inputs and
+  flag rate and reports to the map; a retrain command builds a new version from the log, gates it against the one in
+  service and promotes it through a small registry the scorers follow. Tried on drift injected into the real log:
+  one drift only the monitor could see, one only labels could, and what a retrain recovers
+  ([Drift and retraining](#drift-and-retraining)).
+- **Bugs found by testing against reality**, each fixed and written up: a simulator whose honest traffic looked
+  nothing like the training data ([skew check](#training-serving-skew-check)), a model file LightGBM could not read
+  after Git rewrote its line endings, and a Docker image missing a system library.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  sim["simulator<br/>synthetic traffic or the PaySim log,<br/>plus injected attacks"]
+  tx[("transactions")]
+  sc["scorer<br/>point-in-time features<br/>LightGBM or heuristic"]
+  dec[("decisions")]
+  api["api<br/>FastAPI + WebSocket<br/>rolling metrics"]
+  ui["browser<br/>MapLibre map + account graph"]
+  ctl[("control")]
+  drift[("drift")]
+  sim --> tx --> sc --> dec --> api --> ui
+  sc -- "drift report" --> drift --> api
+  ui -- "Launch attack" --> api
+  api --> ctl --> sim
+```
+
+## Screenshots
+
+| | |
+|---|---|
+| ![The live map, calm](docs/img/map-calm.png) | ![An incident detected and blocked](docs/img/incident.jpg) |
+| Traffic arcs on the world map, nothing flagged. | The camera follows the money to the mule account, down to the district. |
+| ![Ring contained](docs/img/ring-contained.jpg) | |
+| 28 of 28 payments of the injected ring blocked. | |
+
+> **Status:** works end to end (streaming path, features, model serving, tests, UI, CI). By default feature state lives
+> in the scorer's memory, so there is one scorer replica; `FEATURE_STORE=redis` lets several share it (see
+> [Shared feature state in Redis](#shared-feature-state-in-redis)). See [Roadmap](#roadmap) for what is deliberately not done.
 
 ## Run it
 
@@ -17,7 +86,13 @@ Requires Docker.
 docker compose up --build
 ```
 
-Open <http://localhost:8000> and press **Launch attack**.
+Open <http://localhost:8000> and press **Launch attack**. (To run the map on the real PaySim log instead of the
+simulator, see [Demo on the real PaySim log](#demo-on-the-real-paysim-log).) To score with the LightGBM model trained on PaySim
+instead of the heuristic, see [Serving the PaySim model](#serving-the-paysim-model):
+
+```bash
+SCORER=lightgbm docker compose up --build
+```
 
 The page is a flat world map you can drill into: **world, then country, then city, then district**.
 
@@ -38,10 +113,21 @@ needs internet access for MapLibre and d3. `/globe.html` is an earlier 3D-globe 
 Offline checks need no Docker or Kafka:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,model]"
 pytest
 python -m fraudradar.evaluate
+python -m fraudradar.evaluate --scorer lightgbm
+python -m fraudradar.skew
 ```
+
+What the tests cover besides the model and the features: the API (`tests/test_api.py`) runs the real FastAPI app
+with a test client and fake Kafka objects, so the endpoints, the WebSocket hub and the consumer loops are exercised
+without a broker (the Kafka connection itself is not: that is what the Docker runs above check); the rolling metrics
+(`test_metrics.py`) are unit-tested; and for the map page, which has no build step, `test_ui_static.py` checks that
+the scripts parse (with `node`, when installed), that every element they look up exists, that linked files exist,
+and that the fields the script reads from a tick are the fields the server sends. Nothing drives a real browser in
+CI; I checked the page by hand against the real API fed by the offline engine (ticks, KPIs, the model-health badge,
+and the Launch attack flow through to "Ring contained").
 
 ## Training a model
 
@@ -144,13 +230,16 @@ Limits worth knowing:
 ## Results so far
 
 Measured by `python -m fraudradar.evaluate` (seed 7, 120 s at 150 tx/s, two
-rings of 14 accounts):
+rings of 14 accounts), heuristic scorer:
 
 | Metric | Value |
 |---|---|
-| Honest transactions blocked | 0 of 18,000 |
-| Ring transactions blocked | 69 of 81 (85%) |
-| Time to first block after a ring starts | 0.4 s and 1.4 s for the two rings |
+| Honest transactions blocked | 1 of 18,000 |
+| Ring transactions blocked | 61 of 80 (76%) |
+| Ring accounts blocked at least once | 27 of 28 |
+| Time to first block after a ring starts | 2.6 s and 0.7 s for the two rings |
+
+The same replay with `--scorer lightgbm` is in [Serving the PaySim model](#serving-the-paysim-model).
 
 These come from synthetic data produced by the same project, so they show the
 pipeline works. They do **not** show how it would do on real fraud.
@@ -159,26 +248,534 @@ In the live demo on a laptop (one broker, one scorer, 120 tx/s) the UI showed
 end-to-end latency of about 7 ms p50 and 10 to 17 ms p99, event time to
 decision. That is an observation, not a load test.
 
+## Model results on PaySim
+
+A LightGBM model trained with `training/paysim_lightgbm.ipynb` on the
+[PaySim](https://www.kaggle.com/datasets/ealaxi/paysim1) dataset (6,362,620 payments over 743 hours). The split is
+by time: train on hours 1-281, choose the alert threshold on hours 282-355, report on the untouched hours 356-743.
+Everything below is the **test** part; the raw numbers are in [docs/results/paysim_v1](docs/results/paysim_v1).
+
+| Model | Average precision | Fraud caught | Alerts that are fraud | Honest payments flagged |
+|---|---|---|---|---|
+| Logistic regression | 0.638 | 63.2% | 66.2% | 0.110% |
+| LightGBM, payment features only (A) | 0.9995 | 99.98% | 71.0% | 0.139% |
+| LightGBM, A + history (A+B) | 0.9985 | 99.7% | 88.2% | 0.046% |
+| **LightGBM, all features (A+B+C)** | **0.9995** | **99.98%** | **89.7%** | **0.039%** |
+
+"Fraud caught", "alerts that are fraud" and "honest payments flagged" are measured with the threshold set on the
+validation part so that about 0.1% of honest payments are flagged. The last column shows what that threshold
+actually did on the test part, which is why the rows are not comparable on precision alone. One prediction takes
+about 1.8 ms (p99 6 ms) on a Kaggle CPU notebook, one process; that is not a load test.
+
+How to read this honestly:
+
+- **PaySim is easy.** The two strongest signals are "this payment empties the sender's account" and the ratio of the
+  amount to the balance. That is the rule the PaySim simulator uses to create fraud, so a model that sees only the
+  payment is already near-perfect. The score shows the pipeline and the split are sound; it says little about
+  real-world fraud.
+- **The history and chain features added nothing measurable.** The chain features never fire on PaySim (their SHAP
+  value is zero), and the AP differences between A, A+B and A+B+C are about 0.001. That is from one seed and one
+  split, so treat it as noise, not as evidence that any group helps or hurts.
+- **Precision is not comparable across rows.** Each row's threshold flagged a different share of honest payments
+  on the test part (last column).
+- The PaySim fraud rate (about 0.13%) is a property of the simulation.
+
+## Serving the PaySim model
+
+`SCORER=lightgbm` makes the scorer service (and `python -m fraudradar.evaluate --scorer lightgbm`) use the model
+from the section above. The model is a 0.47 MB text file in `src/fraudradar/artifacts/paysim_v1/`, next to the
+metadata the notebook wrote. `pip install -e ".[model]"` adds LightGBM; the heuristic needs nothing extra.
+
+What changed to make that possible:
+
+- A transaction can now carry `kind`, the sender's and recipient's balance before the payment, and a merchant
+  flag, as a mobile-money feed does. The simulator keeps account balances up to date. A fraud-ring account holds
+  exactly what it will send, so its last payment empties it; the mule pools what arrives.
+- `payment_features.py` rebuilds the model's 14 inputs from the stream, with the same point-in-time rule as the
+  heuristic's store. It refuses a model whose feature list it cannot build.
+- The alert thresholds are not 0.85 and 0.5. They come from the model's metadata (score at 0.1% and at 0.01% of
+  honest payments flagged on validation), about 0.004 and 0.006, because the model's scores follow the base rate.
+  `BLOCK_THRESHOLD` and `REVIEW_THRESHOLD` override them.
+
+The same replay (seed 7, 120 s at 150 tx/s, two rings of 14 accounts):
+
+| Metric | Heuristic | LightGBM |
+|---|---|---|
+| Honest transactions blocked | 1 of 18,000 | 33 of 18,000 (0.18%) |
+| Ring transactions blocked | 61 of 80 (76%) | 44 of 80 (55%) |
+| Ring accounts blocked at least once | 27 of 28 | 28 of 28 |
+| Ring money stopped | 80% | 54% |
+
+Read it as a check that serving works, not as a verdict on the model:
+
+- **The simulator was bent towards the model, and that makes the comparison circular.** A ring now ends each
+  account with a sweep, which is what PaySim fraud looks like and what the model learned. The model catches every
+  sweep and misses most of the smaller payments before it, which is why it stops less money than the heuristic.
+- **Honest traffic does not look like PaySim's.** The [skew check](#training-serving-skew-check) measured it:
+  PaySim's honest payments empty the sender's account 31% of the time and the simulator's do 0.1%, and the
+  simulator has no zero-balance senders (PaySim: 33%). So the 33 honest blocks above say how the model treats
+  *this simulator's* honest traffic, not how it would treat PaySim's. 20 of the 33 are honest sweeps, which the
+  model treats as theft; the other 13 depend on the amount scale (in a similar replay, 150 / 1,500 / 5,000 gave
+  0.10% / 0.20% / 1.4% honest blocks).
+- **Live on Kafka** (Docker Compose, `SCORER=lightgbm`, one laptop, 120 tx/s): the UI showed about 7 ms p50 and
+  22 ms p99 from event time to decision, and a ring of 14 accounts had 38 of its 45 payments blocked, the first
+  within the same tick. One observation, not a load test. The Docker image needs the `libgomp1` system package for
+  LightGBM; the slim Python image lacks it and the scorer crashed on start until the Dockerfile installed it.
+- One prediction runs in the scorer's event loop, one process; throughput under load is not measured.
+
+## Demo on the real PaySim log
+
+The map can run on the rows of the real PaySim file instead of the simulator. With the CSV in `training/data/` (see
+above), and the same Docker setup:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.paysim.yml up -d --build
+```
+
+The simulator publishes the file's rows at 120 per second, starting at the first hour after the model's validation
+part (hour 356), so every payment shown is one the model never trained or tuned on; at the end of the file it loops.
+The scorer uses the LightGBM model, reads the same file to rebuild the history of every earlier row before it scores
+the first one it receives, and resynchronises the same way after a restart. Expect about a minute and a half before
+the first decision: about 20 s to locate the start row and 50 s to read 5.1 million earlier rows, through Docker's
+file sharing on Windows. The scorer then holds about 1 GB of feature state. The header of the page says
+"real PaySim log" so it cannot be mistaken for the simulator.
+
+What is real and what is not:
+
+- **Real:** type, amount, both balances, merchant flag, hour counter and fraud label of every row.
+- **Made up for the map:** where an account is. PaySim has no places, so each account name is hashed to one of the
+  map's places, weighted like the simulator's (about a quarter land in Viet Nam). The same account is always in the
+  same place, but the place means nothing; the arcs and the districts are decoration.
+- **Injected:** the **Launch attack** button adds PaySim-style fraud (14 victim accounts, each swept into a fresh
+  account that then cashes out, labelled `attack-NNN`). It is the pattern the model learned, so the model catches all
+  of it (28 of 28 payments blocked in the runs I did). That shows the pipeline reacting, not detection skill.
+- **Fraud shown in the file** is labelled by the hour it falls in (`paysim-hNNN`), so the incident card and the
+  precision and recall figures count real PaySim fraud together with injected attacks. For real-data numbers use the
+  replay above. Amounts have no currency sign because PaySim's currency is unspecified.
+
+Observed on a laptop with Docker (one broker, one scorer, one process): 120 tx/s sustained, about 7 ms p50 and
+9 to 14 ms p99 from publish to decision once the scorer had caught up. That is one observation, not a load test.
+
+**Live matches offline.** After the demo had streamed about 464,000 rows it showed 99 false blocks; the offline
+replay over the first 460,000 to 475,000 rows of the same file gives 99 as well. So the Kafka pipeline, the cold-start
+sync and the feature store add nothing and lose nothing compared with the replay. That stretch of the file has a
+higher false-block rate (0.021%) than the test part as a whole (0.0052%), because the rate varies over the log;
+that is the data, not a fault of the pipeline.
+
+## Shared feature state in Redis
+
+By default the scorer keeps its feature state in its own memory: one scorer, and a restart forgets everything (the PaySim
+demo then rereads the file for a minute). `FEATURE_STORE=redis` moves the PaySim model's history features into Redis, so
+any number of scorer replicas share them and a restarted scorer carries on at once.
+
+```bash
+docker compose down
+docker compose -f docker-compose.yml -f docker-compose.paysim.yml -f docker-compose.redis.yml up -d --build --scale scorer=3
+```
+
+(`down` first: the `transactions` topic is created with 3 partitions, and a topic that already exists keeps its count.)
+
+How it works:
+
+- **What is kept.** For every account that has received a payment, the number of payments and their total
+  (`fr:<namespace>:in:<account>`, a hash). That is all the model uses of the history, so it is all that is stored.
+  The four other history columns are never split on by the trained model; the store sends them as missing and refuses
+  a model that does use them. For the PaySim rows before the demo's start that is 2.18 million recipients and about
+  265 MB of Redis.
+- **One script per payment.** A Lua script reads the recipient's state and then adds the payment; Redis runs a script
+  without interleaving, so each payment sees the state just before itself even with several replicas. The scorer sends
+  a whole Kafka batch as one pipeline of scripts and scores it with one model call.
+- **Loaded once.** `docker-compose.redis.yml` runs a `warmup` job that sums the 5.1 million earlier rows per recipient
+  and writes them to Redis (68 s here, nothing on later starts: it is idempotent). The simulator waits for it, saves how
+  far it got, and resumes there after a restart. In this mode it stops at the end of the file instead of looping,
+  because the rows already counted must not be counted twice. Scorers need no CSV.
+- **Payments are keyed by sender**, so three partitions let three scorers each take a share of the topic.
+
+What it was checked against:
+
+| Check | Result |
+|---|---|
+| History features in Redis vs in memory, payment by payment | the same, to 1e-9 (tests, run against a real Redis in CI) |
+| Whole real PaySim test part (1.25 M payments) through Redis, one worker | identical to the notebook: AP 0.99952, 488 and 65 false alarms |
+| Same, 3 threads sharing the Redis state | AP 0.99952; false alarms 485 and 65 |
+| Same, 8 threads | AP 0.99952; false alarms 457 and 64 |
+| Three scorers on three partitions, live | about 40 tx/s each for 120 in total; an injected ring blocked 28 of 28 |
+| Restarting one scorer | back in 12 s (rejoining the consumer group), no file read, no state lost |
+
+Read it with care:
+
+- **What the threads experiment measures.** Payments are dealt to the threads by sender, the way Kafka partitions a
+  topic, and the threads run concurrently, so two payments to the same recipient on different threads reach Redis in
+  whichever order they happen to run. The recall did not change and the false alarms moved by a few percent. But the
+  rows are dealt in file order in chunks, so the threads never drift far apart; partitions that fall unevenly behind
+  could disagree more. The multi-thread runs are not reproducible to the last digit, and each was run once. The replay
+  is limited by reading the CSV in one thread, so its speed (about 30,000 rows/s at every thread count) is not a
+  scaling measurement.
+- **Latency was higher, and the [load test](#load-test) found why.** With three scorers and Redis the UI showed about
+  15 ms p50 and 75 ms p99 from publish to decision, against 7 and 9 ms for one in-memory scorer. The cause was not
+  Redis: LightGBM, by default, uses every core for each prediction, so each scorer was starting dozens of threads to
+  score a handful of payments and the three fought over the cores. The scorer now uses one thread per batch
+  (`LGBM_THREADS`, default 1); the numbers in the table above and in the first rows of the demo predate that.
+- **Only the PaySim model's path moved.** The heuristic scorer's feature state is still in memory, and
+  `FEATURE_STORE=redis` with it is refused. One Redis node, no failover. After a crash a payment may be counted twice
+  or not at all. The history features are an approximation across partitions by construction; with one partition or one
+  replica they are exact.
+- Run the Redis tests with `REDIS_URL=redis://localhost:6379/0 pytest`; without a Redis they are skipped. Replay the
+  real file through Redis with `python -m fraudradar.replay --redis redis://localhost:6379/0 --workers 3`.
+
+## Training-serving skew check
+
+A model scores whatever features it is given, so if the stream feeds it values spread differently from the ones
+it learned from, its scores mean something else. `python -m fraudradar.skew` replays the simulator through the
+same `PaymentFeatureStore` the scorer uses and compares every feature with `reference_stats.json`, which the
+notebook writes from the training part of PaySim (section 4b). It reports the population stability index (PSI)
+per feature, below 0.1 close, 0.1 to 0.25 moved, above 0.25 a different distribution; honest traffic is compared
+with all PaySim payments and the fraud ring with PaySim's fraud. It also prints the amount scale that would line
+up the median amount, and how often the model splits on each feature (a feature with 0 splits cannot matter, so
+its skew is harmless). It changes nothing by itself. The ring is a few dozen payments, so its figures are noisy.
+The reference is `reference_stats.json`, made by the notebook from the real PaySim training part (3,820,599
+payments, 3,193 of them fraud) and committed next to the model.
+
+**First measurement** (`python -m fraudradar.skew`, seed 7, 120 s at 150 tx/s, honest traffic against all PaySim
+payments). 8 of the 11 features that differ are ones the model uses; the other 3 are never split on.
+
+| Feature | PaySim | Simulator | PSI |
+|---|---|---|---|
+| Payment is a `TRANSFER` | 8% | 40% | 2.5 (all types) |
+| Payment is a `CASH_OUT` / `CASH_IN` | 36% / 22% | 13% / 0% | |
+| Payment empties the sender's account | 31% | 0.1% | 1.8 |
+| Sender's balance was zero | 33% | 0% | 2.8 |
+| Amount is at least 100x the sender's balance | 37% | 0% | 5.4 (ratio) |
+| Hour of day | night lull, 39% of fraud before 10:00 | even | 0.8 |
+| Amount (median, log scale) | 11.2 | 11.1 | 0.77 |
+| Recipient's earlier payments received | median 2 | median 5 | 0.7 |
+
+What it says:
+
+- **The simulator's money model is far from PaySim's.** In PaySim many senders have no money or send more than they
+  hold, and a third of honest payments empty the account. In the simulator senders always have enough and almost
+  never empty it. The model can only tell a sweep from a theft by combining several of these signals, and the
+  simulator never produces the combinations it learned from.
+- **`AMOUNT_SCALE` holds up.** Scanning it from 500 to 8,000, the amount distance is smallest between 1,500 and
+  1,760, and the medians match to within 0.2 on the log scale. The remaining distance is the shape of the amount
+  distribution, not its level. The scale that aligns the medians is 1,760; the default stays at 1,500.
+- **The ring differs from PaySim fraud too.** It pools money into one mule, so the recipient has a long history
+  (median 19 earlier payments), while PaySim fraud mostly goes to fresh accounts (median 0). Its amounts are far
+  larger (median 15.4 against 12.9 on the log scale). Some ring payments are blocked partly because of that.
+- Not fixed here. Making the simulator's honest traffic match these figures means calibrating it to PaySim, which is
+  a design change of its own and would make the comparison with the model more circular, not less.
+
+## Replaying the real PaySim log
+
+The simulator's honest traffic does not look like PaySim's (see above), so numbers measured on it say little about the
+model. `python -m fraudradar.replay` feeds the model the rows of the real PaySim file instead, in file order, through
+the same `PaymentFeatureStore` and the same bundled model the scorer uses, and scores them against the fraud labels.
+It needs the dataset CSV (not in the repo; download it from [Kaggle](https://www.kaggle.com/datasets/ealaxi/paysim1)
+and put it in `training/data/`, which is git-ignored), and takes about a minute and a half:
+
+```bash
+python -m fraudradar.replay --part test
+```
+
+The history features count every earlier payment, so the whole file is walked in order and only the chosen part is
+scored. The CSV used here has the same SHA-256 as the one the model was trained on (`16910f90...eea6b`).
+
+Test part (hours 356-743, never used for training or for choosing thresholds; 1,248,736 payments, 4,250 fraud),
+at the two thresholds the notebook chose on validation:
+
+| | Replay through the serving code | Notebook |
+|---|---|---|
+| Average precision | 0.99952 | 0.99952 |
+| Flagged above the review threshold (0.1% of honest payments on validation): fraud caught | 4,249 of 4,250 (99.976%) | 99.976% |
+| ... alerts that are fraud | 89.698% (488 false alarms) | 89.698% |
+| ... honest payments flagged | 0.039% | 0.039% |
+| Flagged above the block threshold (0.01%): fraud caught | 4,249 of 4,250 | 99.976% |
+| ... alerts that are fraud | 98.493% (65 false alarms) | 98.493% |
+| ... honest payments flagged | 0.0052% | 0.0052% |
+
+Raw output: [docs/results/paysim_replay](docs/results/paysim_replay). What this does and does not show:
+
+- **Training and serving agree.** Features rebuilt one payment at a time by the serving code reproduce the
+  notebook's vectorised features closely enough that every metric above matches to the digits shown. That is the
+  check the skew section could not make on simulated traffic. A test also checks that scoring in chunks gives the
+  same numbers as the service's one-at-a-time path.
+- **It is still PaySim.** These are the numbers from the PaySim section again, now through the serving path. PaySim is
+  a simulation whose fraud is mostly "empty the account"; this says nothing about real-world fraud. The one missed
+  fraud in 4,250 is not a sign of a perfect model.
+- **Only the test part is a fair score.** The notebook used the validation part for early stopping and for the
+  thresholds, and the model trained on the train part. The replay prints those too (validation AP 1.0000,
+  train AP 0.9962); do not quote them as performance.
+- **Speed.** Walking and scoring all 6.36 million rows in chunks took 94 s on a laptop (about 68,000 rows/s, one
+  process). Scoring the first 30,000 rows one at a time through `ScoringEngine.handle`, as the service does, ran at
+  about 25,000 rows/s with a median of 0.04 ms and a p99 of 0.10 ms per payment. Those are early rows with almost no
+  fraud, so few of them paid for the explanation step; it is not a load test and leaves out Kafka.
+
+## Real card payments: IEEE-CIS
+
+PaySim is a simulation, so its near-perfect score says little about real fraud. To see what the same method gets on
+payments where nobody wrote the fraud rule, `training/ieee_cis_lightgbm.ipynb` trains and tests a LightGBM model on the
+[IEEE-CIS Fraud Detection](https://www.kaggle.com/competitions/ieee-fraud-detection) data: 590,540 real, anonymised
+online card payments from Vesta, 3.5% fraud, over 182 days. It uses only the two labelled training files and makes its
+own split by time: train on days 0-100, choose the early-stopping point and thresholds on days 100-140, and report on
+days 140-182 (118,108 payments, 4,064 fraud), which the model never saw. The data is not in the repo; the notebook's
+`metadata.json` has the SHA-256 of both files. Raw results: [docs/results/ieee_cis_v1](docs/results/ieee_cis_v1).
+
+| Model (test part) | Average precision | ROC AUC | Fraud caught at about 5% false alarms | Alerts that are fraud | Fraud caught at about 1% false alarms | Alerts that are fraud |
+|---|---|---|---|---|---|---|
+| Random guessing | 0.034 | 0.5 | | | | |
+| Logistic regression | 0.165 | 0.796 | 50.7% | 18.4% | 31.6% | 28.5% |
+| LightGBM, payment columns (A) | 0.516 | 0.895 | 63.1% | 29.1% | 45.3% | 56.9% |
+| LightGBM, A + proxy-account history (B) | 0.508 | 0.900 | 63.4% | 29.5% | 44.1% | 55.4% |
+
+Next to PaySim, where the same method scores AP 0.9995, the real data gives AP about 0.51 and ROC AUC about 0.90. At a
+budget of about 1 honest payment in 100 flagged, the model catches under half of the fraud and about 4 in 10 alerts are
+wrong. That gap is the point: it measures how much of PaySim's score came from the simulator's rule.
+
+How to read it:
+
+- **The history features did not help.** AP is 0.009 lower and ROC AUC 0.005 higher with them: one split and one seed,
+  so no difference. There is also a warning sign. `email_prior_n`, a running count of earlier payments per email
+  domain, is the model's third most important feature by gain (3.3%). A running count only ever grows, so it may be
+  acting as a clock rather than as behaviour, and for common domains its test-period values are, by construction,
+  larger than any seen in training. A count over a recent window would be the fair version; it has not been run.
+- **The "accounts" are a guess.** The data has no account number, so payments sharing `card1, card2, card3, card5` and
+  `addr1` are treated as one account (42,946 of them). That is an assumption, not a fact.
+- **The validation figure is optimistic.** The model was stopped (762 rounds) and the thresholds were chosen on the
+  validation part, where its AP is 0.63. The test AP of 0.51 is the honest number. The thresholds set for 5% and 1% false
+  alarms gave 5.4% and 1.3% on the test part, a mild shift.
+- **No decay showed up within 70 days.** Scored on four successive slices of the test period, ROC AUC stays between
+  0.890 and 0.904. AP rises from 0.45 to 0.56, but AP depends on the fraud rate (2.9% to 4.1% across slices) and each
+  slice has only about 1,000 fraud cases, so read it as noisy, not as improvement.
+- **The linear baseline did not converge** in 200 iterations, so its row is a loose lower bound.
+- **Many inputs cannot be explained.** The anonymised `V` columns hold 37% of the gain, and the two most important
+  features are `V258` and `V257`.
+- **This is not a leaderboard number.** The competition scored a different, later, unlabelled period, and its top
+  entries used far more feature engineering.
+
+## Load test
+
+`python scripts/load_matrix.py` (needs Docker and the PaySim CSV) recreates the stack for each scorer configuration
+and runs `fraudradar.loadtest` inside the Compose network, so every clock is the same one. The generator is **open
+loop**: it publishes real PaySim rows to Kafka at a fixed rate whatever the scorers do, so a scorer that cannot keep up
+shows as delay and a shortfall instead of slowing the test. Latency is measured from the moment a payment is published
+to the moment its decision arrives back at the generator. Steps are 15 s at 250 to 8,000 payments/s, then 6 s at
+12,000 to 24,000 (all seven configurations ran the low ramp, four of them the high one too; raw results in
+[docs/results/load_test](docs/results/load_test)). `docker stats` is sampled once a second so each step has the CPU the
+scorers, Redis and the broker used. "Kept up" below means at least 99% of the target rate was decided within the step
+and p99 stayed under 100 ms.
+
+| Configuration | Highest rate it kept up with (tx/s) | p50 / p99 there (ms) | Busiest scorer CPU there | First rate it did not keep up with |
+|---|---|---|---|---|
+| Heuristic, state in memory, 1 scorer (synthetic payments) | 16,000 | 6 / 13 | 85% | 24,000 (16,705/s decided, p99 3.1 s) |
+| LightGBM, state in memory, 1 scorer, one payment at a time | 12,000 | 10 / 50 | 92% | 16,000 (14,243/s, p99 0.7 s) |
+| LightGBM, Redis, 1 scorer, batched | 16,000 | 12 / 56 | 76% | 24,000 (21,031/s, p99 0.8 s) |
+| LightGBM, Redis, 2 scorers, 2 partitions | 8,000 (highest tried) | 8 / 12 | 41% | not reached |
+| LightGBM, Redis, 3 scorers, 3 partitions | 24,000 (highest tried) | 9 / 32 | 62% | not reached |
+
+(CPU is a share of one core, as `docker stats` reports it.) What it shows:
+
+- **The scorers are limited by one Python process, not by the model or Redis.** Every saturated configuration was using
+  about one core, and the heuristic, which has no model, saturates in the same range as LightGBM with Redis (16,000 to
+  24,000/s). Per payment the cost is the Kafka client and the JSON, which is why adding partitions and scorers works:
+  three scorers had not saturated at 24,000/s, the highest rate tried (the generator is itself one Python process).
+- **Batching more than pays for Redis.** One scorer with its state in Redis kept up with 16,000 payments/s; with its state in
+  memory and one prediction per payment, 12,000. Moving the state out costs memory elsewhere instead of in the scorer: the
+  in-memory LightGBM scorer held about 1.04 GiB, each Redis-backed scorer 57 MiB plus about 280 to 300 MiB in Redis.
+- **Threads were the earlier latency problem.** At 250 payments/s, LightGBM using all cores (its default) against one
+  thread per batch:
+
+  | | p50 / p99 (ms) | CPU of each scorer |
+  |---|---|---|
+  | 1 scorer, all cores | 14 / 47 | 1,808% |
+  | 1 scorer, 1 thread | 8 / 10 | 26% |
+  | 3 scorers, all cores | 80 / 223 | about 560% each |
+  | 3 scorers, 1 thread | 9 / 12 | 12% each |
+
+  With all cores a scorer spends about eighteen cores of CPU to score 250 payments a second, and three of them
+  slow each other down: the median is about ten times higher. At 8,000 payments/s one scorer with all cores had p50 35 ms and p99 94 ms.
+- **At low load the median is 6 to 9 ms in every one-thread configuration.** Of that, 2 to 3 ms is the time until the scorer has decided; the
+  rest is the decision's trip back. This floor was not broken down further.
+
+What is not shown:
+
+- Everything ran on one 20-core laptop: this tool, the broker, Redis and the scorers share its cores. The numbers
+  compare the pieces; they are not what a cluster would do.
+- One run per cell, 15 s (6 s above 8,000). The 2-scorer row stops at 8,000 payments/s, and the 3-scorer row at 24,000 because that was the
+  highest rate tried, so their real limits are unknown.
+- The heuristic row uses the synthetic generator; the others use real PaySim rows, so its numbers are not strictly comparable.
+- Latency here includes the generator's own scheduling (a few milliseconds at most) and is for payments scored one Kafka batch at a time;
+  no explanation text is requested except for flagged payments, which are a tiny share.
+
+## Drift and retraining
+
+A model goes stale when the traffic stops looking like what it learned from, and in fraud the people on the other
+side change their behaviour on purpose. This part adds the pieces to notice that and to replace the model without
+stopping the scorers. All of it is exercised in the experiment below; none of it has seen drift that was not
+injected, because the PaySim log has no real change of regime.
+
+- **Monitor** (`drift.py`). Each LightGBM scorer keeps the last 20,000 payments' feature rows and flags and, every 10 s,
+  publishes a report to a `drift` topic: the population stability index of each feature against the training part
+  (`reference_stats.json`, the measure the [skew check](#training-serving-skew-check) uses), counting only features the
+  model splits on, and the share of payments flagged against the first full window after the model went live. The API
+  serves the latest report per scorer at `/api/drift`, and the map's top bar shows a badge (healthy, watch, drifting)
+  with the reasons on hover. The scorer pays about 8 µs per payment for it (a 40 µs engine call became 48 µs in a
+  microbenchmark) and 7 ms every 10 s for the report.
+- **Retrain** (`python -m fraudradar.retrain --now 600 --promote`, `retrain.py`). The notebook's training as a command:
+  features come from the serving code, labels are only used up to `now - label_delay` (48 h by default), the newest
+  labelled hours are split into a validation part (early stopping and the two thresholds) and a *gate* part neither
+  model has been tuned on, and the new version is written with its own `reference_stats.json` and a report.
+  `build_reference` reproduces the notebook's reference exactly (checked against the committed one on the real training
+  part: the same 3,820,599 rows and 3,193 fraud cases, the same kind of bins, bin shares within 3e-7 and bin edges within 6e-7).
+- **Gate.** The challenger replaces the model in service only if it adds 0.002 average precision on the gate part, or
+  if the model in service has drifted off its false-alarm target (over 3x the 0.1% it was set for) and the challenger at
+  least halves that without losing ranking; a challenger over 5x the target never goes in. The second rule exists
+  because of the inflation case below, where average precision does not move at all.
+- **Registry** (`registry.py`, `models/`). Versions sit next to each other and `current.json` names the one in service;
+  promoting, or promoting an older version again, is one atomic file rewrite, with every promotion logged to
+  `history.jsonl`. Scorers started with `MODEL_REGISTRY=/models` (the Compose default; the folder is git-ignored) look at
+  the pointer every 5 s and switch between two batches, keeping their feature state. A version the running feature
+  store cannot serve (other columns, or a Redis store asked to use a feature it does not keep) is logged and refused,
+  and the old model keeps scoring. Tried live on the running stack: promoting `v2-evasion` printed `now serving model
+  v2-evasion (was paysim_v1)` within a second, promoting a version with a corrupted feature list printed `not switching
+  ... still serving v2-evasion`, and `python -m fraudradar.registry promote paysim_v1` rolled back.
+
+### The experiment
+
+`python scripts/drift_experiment.py` injects drift into the real PaySim log from hour 450 on (`scenario`s in `drift.py`),
+then does two things, with the same real, untouched windows as a control. The model in service is the bundled one
+(trained on hours 1 to 281, tuned on 282 to 355).
+
+1. A scan, a 24-hour window at a time over the model's test part (hours 356 to 743): the monitor's two signals, and
+   the average precision the model really had (which needs labels).
+2. Retraining as it would have happened at hours 500, 550 and 600 with 48 hours of label delay, and, as a control, at
+   hour 640 with instant labels. Every challenger, whatever the gate said, is then measured on hours 650 to 743, which
+   neither it nor the model in service has seen (1,038 fraud cases).
+
+![Flag rate, PSI of the targeted feature and average precision per 24-hour window, for each injected drift, against the same windows without drift](docs/img/drift_retrain.png)
+
+*Dashed grey: the same hours of the real log with nothing injected. The last window holds few payments and a fraud share of 15%.*
+
+**What the real log does by itself.** Before injecting anything, the scan shows the monitor crying wolf
+([docs/results/drift_retrain/scan_natural.txt](docs/results/drift_retrain/scan_natural.txt)). From hour 404 on, PaySim's honest
+traffic collapses (96,000 payments in a day, then 17,000, then 7,000) while fraud stays at about 11 cases an hour, so
+the fraud share goes from 0.1% to 1 to 15%, the hour-of-day spread of the traffic changes (PSI of `hour` 0.6 to 3.6 from
+hour 404, against 0.02 to 0.03 before) and the flag rate follows the fraud share. The model is unaffected: average precision
+stays at 0.997 to 1.000 in every window. So "worst PSI" is red for most of the real log, and a flag-rate test
+against a fixed baseline fires for the wrong reason (the base rate moved, not the model). Neither signal is a
+verdict; they say where to look.
+
+**Inflation: every amount triples (covariate drift).**
+
+- The monitor sees it at once and clearly: PSI of `amount_log` is 0.49 to 0.76 in every window from hour 452 to 715, against at
+  most 0.04 in the control, and the flag rate is 2.5 to 10 times the control's (2.9 to 8.9% against 0.4 to 3.6%).
+- Average precision does not see it at all: 0.993 to 1.000 throughout. The ranking of payments is still right. But at
+  the model's fixed review threshold, on the held-out hours, 5.5% of honest payments are flagged against the 0.1%
+  it was set for, and only 19% of flags are fraud, with recall at 1.000. A dashboard that watched only average
+  precision or recall would have called this model healthy while the analysts drowned.
+
+**Evasion: fraud stops emptying the account (concept drift).** From hour 450 a fraud payment takes 20 to 80% of the
+balance, not all of it, which is what PaySim's fraud always does and what the model learned.
+
+- Average precision falls from 0.95 to 0.27 in the first full window and stays between 0.13 and 0.39; recall at the
+  review threshold falls to 0.10 to 0.27. On the held-out hours: average precision 0.303, recall 0.205.
+- The unlabelled signals do not isolate it. Not one feature's spread moves: PSI of `amount_to_oldbal` is 0.00 to 0.03 in every window up to hour 691, the
+  same as the control's, and of `drains_account` 0.00 to 0.01, because fraud is 0.1 to 0.3% of the rows and moves no
+  decile. The flag rate does drop, from 1.29% to 0.28% window on window (0.07 to 0.63% after), but the control moves as much
+  between windows with no drift at all (0.33% to 1.38% from hour 404 to 451, the other way), so with no
+  counterfactual a fall reads as the base-rate noise above. Catching this needs labels, which in a real system arrive days late, or a signal
+  that normalises for the fraud share; this project does not have one yet.
+
+**Retraining.** The model in service on the held-out hours, and each challenger:
+
+| Scenario | Retrain at hour | Labels known up to | Drifted fraud in training / validation | Gate | Held-out AP | Held-out recall | Held-out false alarms |
+|---|---|---|---|---|---|---|---|
+| Evasion | in service | | | | 0.303 | 0.205 | 0.033% |
+| | 500 | 452 | 0 / 0 | pass | 0.380 | 0.237 | 0.163% |
+| | 550 | 502 | 0 / 188 | pass | 0.396 | 0.265 | 0.020% |
+| | 600 | 552 | 308 / 394 | pass | 0.884 | 0.768 | 0.080% |
+| | 640, instant labels | 640 | 1,246 / 364 | pass | 0.902 | 0.817 | 0.129% |
+| Inflation | in service | | | | 0.9985 | 1.000 | 5.487% |
+| | 500 | 452 | 0 / 0 | **fail** | 0.9977 | 1.000 | 5.414% |
+| | 550 | 502 | 0 / 188 | **fail** | 0.9850 | 0.995 | 0.322% |
+| | 600 | 552 | 308 / 394 | pass | 0.9998 | 1.000 | 0.098% |
+| | 640, instant labels | 640 | 1,246 / 364 | pass | 0.9993 | 1.000 | 0.112% |
+
+(Held-out recall and false alarms are at each model's own review threshold; the target false-alarm rate is 0.100%.)
+
+- **Retraining only helps once labelled examples of the new behaviour have reached the training part.** Evasion started at 450;
+  the retrain at 500 could see labels only up to 452, so it trained on the old behaviour and gained 0.08 average
+  precision, and the one at 550 trained on none of it (its 188 drifted cases went to validation). The one at 600, with 308 drifted
+  fraud cases in training, recovered to 0.884. Waiting for labels cost about 150 hours of a model that missed four
+  fraud cases in five. With instant labels at 640 the result is 0.902, only a little better than with the delay at 600, so
+  the lag matters most in the first hundred hours.
+- **For inflation, retraining is about the threshold, not the ranking.** At 600 the challenger's false alarms are back at 0.098%
+  against 5.5%, with average precision unchanged (0.9998 against 0.9985).
+- **The gate refused two models, one of which it arguably should have taken.** At 500 nothing had drifted in the gate part yet
+  and the challenger was no better, so "no" is right. At 550 the challenger cut false alarms from 5.1% to 0.38% on the gate
+  part but lost 0.018 average precision there (trained on pre-drift data only, with drifted data used only to stop
+  early), so the rule refused it; on the held-out hours it would have cut false alarms from 5.5% to 0.32% for
+  0.013 average precision. How much ranking to trade for false alarms is a business choice the rule hard-codes at
+  "none". In the other direction, the gate passed the evasion retrain at 500 on a gain of 0.0045 on a gate window where nothing had
+  drifted: a gain that size is within what a different seed could produce, so 0.002 is a low bar.
+
+What this does not show:
+
+- **Everything drifted here was injected**, on a simulated dataset, in two hand-picked ways. It shows the machinery works and
+  what each signal can and cannot see; it says nothing about how often real fraud drifts, or in which way.
+- One run per cell, one seed; no confidence intervals. The held-out stretch holds 1,038 fraud cases, which is enough for the
+  large effects above and not for the small ones (0.002 of average precision).
+- The monitor's limits (PSI above 0.1 and 0.25, a flag-rate z-score above 4) are the usual rules of thumb, not tuned, and, as the
+  control shows, they fire on a base-rate shift that does not hurt the model.
+- Nothing starts a retrain by itself. The command exists and is safe to schedule; the trigger (a job that watches
+  the reports, waits for labels and runs it) does not. The monitor also never sees labels: wiring late labels into it
+  (recall on the confirmed fraud of last week) is the missing piece for concept drift.
+- The retrain reads the whole CSV and takes about two minutes for features and about 20 seconds to fit; it is a batch job, not
+  something a scorer does.
+
 ## Roadmap
 
-- [ ] Train a LightGBM model on labeled replays and replace `HeuristicScorer` (same interface)
-- [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
-- [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim)
-- [ ] Load test, with p50/p99 under rising throughput
-- [ ] Drift detection and automatic retraining when attackers change tactics
-- [ ] Feature lineage and a training-serving skew check
+- [x] Train a LightGBM model on PaySim and report it honestly (see above)
+- [x] Serve that model in the scorer in place of `HeuristicScorer` (opt in with `SCORER=lightgbm`)
+- [x] Move the PaySim model's feature state to Redis so several scorer replicas can run, on a 3-partition topic (see above); the heuristic's state is still in memory
+- [x] Replay the real PaySim log through the serving code and compare with the notebook (see above)
+- [x] Benchmark on real card payments (IEEE-CIS), see above
+- [x] Demo on the real PaySim log (`docker-compose.paysim.yml`)
+- [ ] IEEE-CIS follow-up: windowed history counts instead of running counts, and several seeds/splits
+- [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim); the skew check lists what is off
+- [x] Load test, with p50/p99 under rising throughput (see above)
+- [x] Drift monitor, retrain command with a gate, and a model registry the scorers follow live (see above)
+- [ ] Start a retrain by itself when the monitor says drift, once labels have arrived
+- [ ] Feed late fraud labels into the monitor (recall on confirmed fraud), and a flag-rate signal that normalises for the fraud share
+- [x] Training-serving skew check, with a first measurement against the real PaySim training part (see above)
+- [ ] Feature lineage
 
 ## Layout
 
 ```
 scripts/
   build_geodata.py  downloads and builds the map datasets
+  load_matrix.py    runs the load test against each scorer configuration
+  drift_experiment.py  injects drift into the PaySim log, scans it, retrains and measures
+  plot_drift.py     draws docs/img/drift_retrain.png from the experiment's results
 src/fraudradar/
   geo.py         active places and districts, shared by the simulator and the map
   data/          countries, places and districts as GeoJSON (built, committed)
   generator.py   synthetic traffic and fraud rings
-  features.py    streaming features, point-in-time correct
-  model.py       scorers and thresholds
+  features.py    streaming features for the heuristic, point-in-time correct
+  payment_features.py  the PaySim model's 14 inputs, built from the stream
+  model.py       heuristic scorer and thresholds
+  lgbm.py        loads the trained LightGBM model and explains its scores
+  artifacts/     the trained model, its metadata and reference_stats.json
+  skew.py        training-serving skew check, and `build_reference` (the notebook's reference, as code)
+  drift.py       drift monitor, injected drift scenarios, windowed scan of the log
+  retrain.py     retrain from the log, gate against the model in service
+  registry.py    model versions and the pointer the scorers follow
+  replay.py      replays the real PaySim log through the serving code
+  loadtest.py    open-loop load generator and latency report
+  paysim_stream.py  the PaySim log as the demo's live traffic
+  redis_features.py the PaySim model's history features in Redis (shared by scorer replicas)
+  paysim_warmup.py  loads the history before the demo's start into Redis, once
+  serving.py     builds the engine for a scorer name
   engine.py      features -> score -> action
   evaluate.py    offline replay and metrics
   simulator/     Kafka producer + control listener
@@ -186,3 +783,8 @@ src/fraudradar/
   api/           FastAPI, WebSocket hub, metrics, static UI (map, fonts)
 tests/
 ```
+
+## Licence
+
+The code is released under the [MIT licence](LICENSE). The map data and the label font keep their own
+licences, listed under [Geography](#geography); the sources must be credited as described there.

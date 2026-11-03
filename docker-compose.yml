@@ -38,7 +38,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     # One partition keeps event order, which the single in-memory scorer relies on.
     command:
-      - rpk topic create transactions decisions control --brokers redpanda:9092 --partitions 1 --replicas 1 || true
+      - rpk topic create transactions decisions control drift --brokers redpanda:9092 --partitions 1 --replicas 1 || true
     restart: "no"
 
   simulator:
@@ -51,6 +51,16 @@ services:
   scorer:
     <<: *app
     command: ["python", "-m", "fraudradar.scorer"]
+    environment:
+      KAFKA_BOOTSTRAP: redpanda:9092
+      # heuristic (default) or lightgbm, e.g.  SCORER=lightgbm docker compose up
+      SCORER: ${SCORER:-heuristic}
+      LGBM_THREADS: ${LGBM_THREADS:-1}
+      # Follow the model versions in ./models (see fraudradar.registry); the bundled model until one is promoted.
+      MODEL_REGISTRY: /models
+    volumes:
+      - ./src:/app/src
+      - ./models:/models:ro
 
   api:
     <<: *app

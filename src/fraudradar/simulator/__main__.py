@@ -1,5 +1,7 @@
 """Publishes synthetic transactions to Kafka and reacts to control commands.
 
+With `DATA_SOURCE=paysim` the legitimate traffic is the rows of the real PaySim file (see `paysim_stream`).
+
 Control commands (topic `control`, JSON):
     {"type": "attack", "size": 14}   launch a fraud ring
     {"type": "rate", "tps": 300}     change the legitimate traffic rate
@@ -18,7 +20,7 @@ import orjson
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from ..config import Settings
-from ..generator import TransactionGenerator
+from ..generator import EndOfLog, TransactionGenerator
 from ..kafka_util import start_with_retry
 from ..schemas import Transaction
 
@@ -60,9 +62,31 @@ async def _control_loop(
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = Settings.from_env()
-    gen = TransactionGenerator(seed=settings.seed, n_accounts=settings.n_accounts)
+    progress = progress_key = None  # a Redis client and key where the run saves how far it got, when state is in Redis
+    if settings.data_source == "paysim":
+        from ..paysim_stream import PaysimSource
+
+        resume, loop = None, True
+        if settings.feature_store == "redis":
+            # the history already counted in Redis must not be counted twice: carry on where the last run
+            # stopped, and stop at the end of the file instead of starting over
+            from ..paysim_warmup import progress_key
+            from ..serving import connect_redis
+
+            progress = connect_redis(settings.redis_url)
+            resume = int(progress.get(progress_key()) or 0) or None
+            loop = False
+        gen = PaysimSource(settings.paysim_csv, settings.paysim_start_step, seed=settings.seed,
+                           resume_index=resume, loop=loop)
+        log.info(
+            "streaming the real PaySim log from %s, hour %d (start row %d, next row %d)",
+            gen.csv, gen.start_step, gen.start_index, gen.next_index,
+        )
+    else:
+        gen = TransactionGenerator(seed=settings.seed, n_accounts=settings.n_accounts)
     state = _State(tps=settings.tps)
     scheduled: list = []
+    ended = False
 
     producer = await start_with_retry(
         lambda: AIOKafkaProducer(bootstrap_servers=settings.bootstrap, linger_ms=5)
@@ -91,8 +115,15 @@ async def main() -> None:
             last = now
             now_ms = int(time.time() * 1000)
             n, credit = int(credit), credit - int(credit)
-            for _ in range(n):
-                await publish(gen.legit(now_ms))
+            for _ in range(0 if ended else n):
+                try:
+                    await publish(gen.legit(now_ms))
+                except EndOfLog:
+                    ended = True
+                    log.info("end of the PaySim log: no more rows will be published (the history in Redis has them all)")
+                    break
+            if progress is not None and not ended:
+                progress.set(progress_key(), gen.next_index)
             while scheduled and scheduled[0][0] <= now_ms:
                 await publish(heapq.heappop(scheduled)[2])
     finally:

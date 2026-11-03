@@ -12,10 +12,8 @@ from __future__ import annotations
 import argparse
 import json
 
-from .engine import ScoringEngine
-from .features import FeatureStore
 from .generator import TransactionGenerator
-from .model import HeuristicScorer
+from .serving import SCORERS, build_engine
 
 
 def run_offline(
@@ -24,8 +22,9 @@ def run_offline(
     tps: int = 150,
     ring_starts: tuple[int, ...] = (30, 70),
     ring_size: int = 14,
-    block: float = 0.85,
-    review: float = 0.5,
+    scorer: str = "heuristic",
+    block: float | None = None,
+    review: float | None = None,
 ) -> dict:
     gen = TransactionGenerator(seed=seed)
     base = 1_700_000_000_000
@@ -37,10 +36,12 @@ def run_offline(
         stream.extend(txs)
     stream.sort(key=lambda t: t.ts)
 
-    engine = ScoringEngine(FeatureStore(), HeuristicScorer(), block, review)
+    engine = build_engine(scorer, block, review)
     legit = legit_block = legit_review = 0
     ring_tx = ring_block = ring_review = 0
     first_block: dict[str, int] = {}
+    ring_accounts: set[str] = set()
+    ring_accounts_blocked: set[str] = set()
     money_blocked = money_passed = 0.0
     for tx in stream:
         d = engine.handle(tx, now_ms=tx.ts)
@@ -50,15 +51,19 @@ def run_offline(
             legit_review += d.action == "review"
         else:
             ring_tx += 1
+            ring_accounts.add(tx.src)
             ring_block += d.action == "block"
             ring_review += d.action == "review"
             if d.action == "block":
                 first_block.setdefault(tx.truth, tx.ts)
+                ring_accounts_blocked.add(tx.src)
                 money_blocked += tx.amount
             else:
                 money_passed += tx.amount
 
     return {
+        "scorer": scorer,
+        "thresholds": {"block": engine.block_threshold, "review": engine.review_threshold},
         "legit_tx": legit,
         "legit_blocked": legit_block,
         "false_block_rate": legit_block / legit,
@@ -67,6 +72,8 @@ def run_offline(
         "ring_blocked": ring_block,
         "ring_block_recall": ring_block / ring_tx,
         "ring_reviewed": ring_review,
+        "ring_accounts": len(ring_accounts),
+        "ring_accounts_blocked": len(ring_accounts_blocked),
         "seconds_to_first_block": {
             rid: (first_block[rid] - ts) / 1000 if rid in first_block else None
             for rid, ts in ring_ids.items()
@@ -81,8 +88,9 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--seconds", type=int, default=120)
     parser.add_argument("--tps", type=int, default=150)
+    parser.add_argument("--scorer", choices=SCORERS, default="heuristic")
     args = parser.parse_args()
-    print(json.dumps(run_offline(seed=args.seed, seconds=args.seconds, tps=args.tps), indent=2))
+    print(json.dumps(run_offline(seed=args.seed, seconds=args.seconds, tps=args.tps, scorer=args.scorer), indent=2))
 
 
 if __name__ == "__main__":

@@ -1,21 +1,22 @@
 """Scoring models.
 
 `HeuristicScorer` is a hand-weighted logistic function over the streaming
-features. It is a placeholder with the same interface a trained model will
-have (features in, probability and reasons out), so swapping in LightGBM
-later changes this file and nothing else.
+features. The trained model (lgbm.py) has the same interface: features in,
+probability and reasons out. Each scorer comes with its own feature store.
 """
 
 from __future__ import annotations
 
 import math
-from typing import Protocol
+from typing import Any, Protocol
 
 from .features import Features
 
 
 class Scorer(Protocol):
-    def score(self, f: Features) -> tuple[float, list[str]]: ...
+    """Whatever the feature store returns in, a probability and reasons out."""
+
+    def score(self, f: Any) -> tuple[float, list[str]]: ...
 
 
 def decide(score: float, block: float, review: float) -> str:

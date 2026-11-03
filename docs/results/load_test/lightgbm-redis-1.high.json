@@ -1,0 +1,112 @@
+{
+ "source": "paysim",
+ "duration_s": 6,
+ "rates": [
+  12000,
+  16000,
+  24000
+ ],
+ "steps": [
+  {
+   "target_rate": 12000,
+   "sent": 72000,
+   "sent_rate": 11991.2,
+   "decided": 72000,
+   "lost": 0,
+   "decided_in_window_rate": 11977.0,
+   "e2e_ms": {
+    "p50": 9,
+    "p90": 14,
+    "p99": 31,
+    "p999": 39,
+    "max": 41
+   },
+   "to_decision_ms": {
+    "p50": 3,
+    "p99": 15
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693897648,
+    1793693903652
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     69.0
+    ],
+    "redis": 25.0,
+    "redpanda": 18.0
+   }
+  },
+  {
+   "target_rate": 16000,
+   "sent": 96000,
+   "sent_rate": 15988.1,
+   "decided": 96000,
+   "lost": 0,
+   "decided_in_window_rate": 15954.7,
+   "e2e_ms": {
+    "p50": 12,
+    "p90": 22,
+    "p99": 56,
+    "p999": 65,
+    "max": 68
+   },
+   "to_decision_ms": {
+    "p50": 5,
+    "p99": 32
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693906183,
+    1793693912188
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     76.0
+    ],
+    "redis": 23.0,
+    "redpanda": 22.0
+   }
+  },
+  {
+   "target_rate": 24000,
+   "sent": 144000,
+   "sent_rate": 23976.3,
+   "decided": 144000,
+   "lost": 0,
+   "decided_in_window_rate": 21030.6,
+   "e2e_ms": {
+    "p50": 292,
+    "p90": 761,
+    "p99": 843,
+    "p999": 858,
+    "max": 862
+   },
+   "to_decision_ms": {
+    "p50": 259,
+    "p99": 811
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693914721,
+    1793693920727
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     71.0
+    ],
+    "redis": 21.0,
+    "redpanda": 20.0
+   }
+  }
+ ],
+ "name": "lightgbm-redis-1",
+ "what": "LightGBM, state in Redis, 1 scorer, 1 partition, batched",
+ "scorers": 1,
+ "partitions": 1,
+ "memory_mib_max": {
+  "fraudradar-redis-1": 283.1,
+  "fraudradar-scorer-1": 60.4
+ }
+}

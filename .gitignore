@@ -12,3 +12,21 @@ dist/
 /training/data/
 /models/
 .vscode/
+
+# local tooling
+.venv-train/
+.ipynb_checkpoints/
+.idea/
+.DS_Store
+*.log
+
+# notebook runs outside Colab write here
+work/
+
+# raw notebook outputs: the small result files live in docs/results/, the model is added deliberately
+/training/fraud_model_paysim/
+/training/*.zip
+/training/archive/
+/docs/results/ieee_cis_v1/lgbm_ieee_cis.txt
+/docs/results/ieee_cis_v1/*.zip
+/training/ieee_cis_results/

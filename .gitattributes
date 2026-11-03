@@ -1,0 +1,2 @@
+# The trained model is a text file LightGBM parses byte for byte; never rewrite its line endings.
+src/fraudradar/artifacts/** -text

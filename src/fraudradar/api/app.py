@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -25,6 +26,8 @@ log = logging.getLogger("api")
 STATIC_DIR = Path(__file__).parent / "static"
 FLUSH_INTERVAL_S = 0.1
 MAX_ALLOWED_PER_TICK = 60  # keep the browser light at high throughput; every non-allow is sent
+DRIFT_STALE_S = 60  # a scorer that has not reported for this long is not counted
+HEALTH_RANK = {"warming up": 0, "ok": 1, "watch": 2, "drift": 3}
 
 
 class AttackRequest(BaseModel):
@@ -36,6 +39,24 @@ class Hub:
         self.clients: set[WebSocket] = set()
         self.metrics = Metrics()
         self._pending: list[dict] = []
+        self.drift: dict[str, dict] = {}  # latest drift report of each scorer replica
+
+    def ingest_drift(self, report: dict) -> None:
+        self.drift[report["scorer"]] = report
+
+    def model_health(self) -> dict | None:
+        """One line for the UI: the worst status among the scorers that reported lately, and the models they serve."""
+        now = time.time() * 1000
+        live = [r for r in self.drift.values() if now - r["ts"] < DRIFT_STALE_S * 1000]
+        if not live:
+            return None
+        worst = max(live, key=lambda r: HEALTH_RANK.get(r["status"], 0))
+        return {
+            "status": worst["status"],
+            "reasons": worst.get("reasons", []),
+            "models": sorted({r["model"] for r in live}),
+            "scorers": len(live),
+        }
 
     def ingest(self, d: dict) -> None:
         self.metrics.ingest(d)
@@ -69,7 +90,7 @@ class Hub:
         if not self.clients:
             return
         payload = orjson.dumps(
-            {"type": "tick", "items": self._compact(items), "stats": self.metrics.snapshot()}
+            {"type": "tick", "items": self._compact(items), "stats": self.metrics.snapshot(), "model": self.model_health()}
         ).decode()
         results = await asyncio.gather(
             *(ws.send_text(payload) for ws in list(self.clients)), return_exceptions=True
@@ -85,6 +106,14 @@ async def _consume_decisions(consumer: AIOKafkaConsumer, hub: Hub) -> None:
             hub.ingest(orjson.loads(msg.value))
         except Exception:
             log.exception("bad decision message")
+
+
+async def _consume_drift(consumer: AIOKafkaConsumer, hub: Hub) -> None:
+    async for msg in consumer:
+        try:
+            hub.ingest_drift(orjson.loads(msg.value))
+        except Exception:
+            log.exception("bad drift message")
 
 
 async def _flush_loop(hub: Hub) -> None:
@@ -107,11 +136,20 @@ async def lifespan(app: FastAPI):
             auto_offset_reset="latest",
         )
     )
+    drift_consumer = await start_with_retry(
+        lambda: AIOKafkaConsumer(
+            settings.topic_drift,
+            bootstrap_servers=settings.bootstrap,
+            group_id=None,
+            auto_offset_reset="latest",
+        )
+    )
     app.state.hub = hub
     app.state.producer = producer
     app.state.settings = settings
     tasks = [
         asyncio.create_task(_consume_decisions(consumer, hub)),
+        asyncio.create_task(_consume_drift(drift_consumer, hub)),
         asyncio.create_task(_flush_loop(hub)),
     ]
     try:
@@ -121,6 +159,7 @@ async def lifespan(app: FastAPI):
             t.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         await consumer.stop()
+        await drift_consumer.stop()
         await producer.stop()
 
 
@@ -130,7 +169,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)  # the GeoJSON files are s
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"ok": True}
+    return {"ok": True, "source": app.state.settings.data_source}
 
 
 @app.get("/api/cities")
@@ -141,6 +180,13 @@ async def cities() -> list[dict]:
 @app.get("/api/stats")
 async def stats() -> dict:
     return app.state.hub.metrics.snapshot()
+
+
+@app.get("/api/drift")
+async def drift() -> dict:
+    """The latest drift report of every scorer replica: per-feature PSI, flag rate, and which model it is serving."""
+    hub: Hub = app.state.hub
+    return {"summary": hub.model_health(), "scorers": list(hub.drift.values())}
 
 
 @app.post("/api/attack")

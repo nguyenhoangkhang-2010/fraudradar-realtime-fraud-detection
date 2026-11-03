@@ -1,0 +1,120 @@
+{
+ "source": "paysim",
+ "duration_s": 6,
+ "rates": [
+  12000,
+  16000,
+  24000
+ ],
+ "steps": [
+  {
+   "target_rate": 12000,
+   "sent": 72000,
+   "sent_rate": 11991.8,
+   "decided": 72000,
+   "lost": 0,
+   "decided_in_window_rate": 11987.2,
+   "e2e_ms": {
+    "p50": 8,
+    "p90": 11,
+    "p99": 14,
+    "p999": 18,
+    "max": 22
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 4
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793694016836,
+    1793694022840
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     30.0,
+     30.0,
+     30.0
+    ],
+    "redis": 16.0,
+    "redpanda": 18.0
+   }
+  },
+  {
+   "target_rate": 16000,
+   "sent": 96000,
+   "sent_rate": 15990.8,
+   "decided": 96000,
+   "lost": 0,
+   "decided_in_window_rate": 15970.3,
+   "e2e_ms": {
+    "p50": 8,
+    "p90": 12,
+    "p99": 24,
+    "p999": 49,
+    "max": 60
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 8
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793694025364,
+    1793694031367
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     49.0,
+     49.0,
+     49.0
+    ],
+    "redis": 27.0,
+    "redpanda": 28.0
+   }
+  },
+  {
+   "target_rate": 24000,
+   "sent": 144000,
+   "sent_rate": 23979.5,
+   "decided": 144000,
+   "lost": 0,
+   "decided_in_window_rate": 23956.5,
+   "e2e_ms": {
+    "p50": 9,
+    "p90": 14,
+    "p99": 32,
+    "p999": 41,
+    "max": 47
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 12
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793694033904,
+    1793694039909
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     62.0,
+     61.0,
+     62.0
+    ],
+    "redis": 39.0,
+    "redpanda": 31.0
+   }
+  }
+ ],
+ "name": "lightgbm-redis-3",
+ "what": "LightGBM, state in Redis, 3 scorers, 3 partitions",
+ "scorers": 3,
+ "partitions": 3,
+ "memory_mib_max": {
+  "fraudradar-scorer-2": 56.6,
+  "fraudradar-scorer-1": 57.1,
+  "fraudradar-redis-1": 297.2,
+  "fraudradar-scorer-3": 57.2
+ }
+}
