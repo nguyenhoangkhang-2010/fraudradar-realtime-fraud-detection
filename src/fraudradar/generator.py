@@ -25,6 +25,10 @@ from . import geo
 from .schemas import Transaction
 
 
+class EndOfLog(Exception):
+    """A source of transactions that does not start over has run out."""
+
+
 @dataclass(slots=True)
 class _Profile:
     account: str

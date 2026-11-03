@@ -156,6 +156,101 @@ def replay(
     )
 
 
+def replay_redis(
+    path: str | Path,
+    redis_url: str,
+    workers: int = 1,
+    parts: tuple[str, ...] = ("test",),
+    directory: str | Path = ARTIFACT_DIR,
+    limit: int | None = None,
+    chunk: int = 2_000,
+    namespace: str | None = None,
+) -> Replay:
+    """`replay` with the history features kept in Redis, as the scorer replicas keep them.
+
+    Payments are dealt to `workers` threads by a hash of the sender, the way Kafka partitions a topic keyed by
+    sender, and each thread folds its payments into the shared Redis state in order, concurrently with the
+    others. With one worker the result is exactly `replay`'s. With more, two payments to the same recipient that
+    land on different workers reach Redis in whichever order the threads happen to run, so this measures what
+    several partitions cost. A run with `workers > 1` is not reproducible to the last digit.
+    """
+    import queue
+    import threading
+    import uuid
+    import zlib
+
+    from .redis_features import RedisPaymentFeatureStore
+    from .serving import connect_redis
+
+    scorer = LightGBMScorer.load(directory)
+    split = scorer.meta["split"]
+    namespace = namespace or f"replay-{uuid.uuid4().hex[:8]}"
+    cats, unused = scorer.meta["type_categories"], scorer.unused_features()
+    stores = [
+        RedisPaymentFeatureStore(connect_redis(redis_url), scorer.feature_names, cats, unused, namespace, 1.0)
+        for _ in range(workers)
+    ]
+    scored = set(parts)
+    queues = [queue.Queue(maxsize=32) for _ in range(workers)]
+    found: list[list[tuple]] = [[] for _ in range(workers)]  # per worker: (row index, features, label, part)
+    errors: list[BaseException] = []
+
+    def work(w: int) -> None:
+        try:
+            while (item := queues[w].get()) is not None:
+                batch = item
+                rows = stores[w].features_and_update_many([tx for _, tx in batch])
+                for (n, tx), row in zip(batch, rows):
+                    part = part_of(tx.step, split)
+                    if part in scored:
+                        found[w].append((n, row, tx.truth is not None, part))
+        except BaseException as exc:  # noqa: BLE001 - report it from the main thread
+            errors.append(exc)
+            while queues[w].get() is not None:  # keep draining so the producer never blocks
+                pass
+
+    threads = [threading.Thread(target=work, args=(w,), daemon=True) for w in range(workers)]
+    for t in threads:
+        t.start()
+    start = time.perf_counter()
+    buffers: list[list] = [[] for _ in range(workers)]
+    walked = 0
+    try:
+        for n, tx in enumerate(transactions(path, limit)):
+            walked += 1
+            w = zlib.crc32(tx.src.encode()) % workers
+            buffers[w].append((n, tx))
+            if len(buffers[w]) >= chunk:
+                queues[w].put(buffers[w])
+                buffers[w] = []
+        for w in range(workers):
+            if buffers[w]:
+                queues[w].put(buffers[w])
+    finally:
+        for w in range(workers):
+            queues[w].put(None)
+        for t in threads:
+            t.join()
+        stores[0].clear()
+    if errors:
+        raise errors[0]
+    seconds = time.perf_counter() - start
+
+    merged = sorted((item for per in found for item in per), key=lambda item: item[0])
+    if not merged:
+        empty = np.array([], dtype=np.float64)
+        return Replay(empty, empty, np.array([], dtype=bool), np.array([]), walked, seconds)
+    x = np.vstack([row for _, row, _, _ in merged])
+    return Replay(
+        scorer.score_batch(x),
+        scorer.score_batch(x.astype(np.float32)),
+        np.array([label for _, _, label, _ in merged], dtype=bool),
+        np.array([part for _, _, _, part in merged]),
+        walked,
+        seconds,
+    )
+
+
 def average_precision(scores: np.ndarray, labels: np.ndarray) -> float:
     """Area under the precision-recall curve, step-wise, ties handled as scikit-learn does."""
     positives = int(labels.sum())
@@ -232,13 +327,18 @@ def main() -> None:
     parser.add_argument("--limit", type=int, help="only the first N rows of the file (a quick look)")
     parser.add_argument("--reference-dir", default=str(ARTIFACT_DIR), help="folder with the model and its metadata")
     parser.add_argument("--json", help="also write the results to this file")
+    parser.add_argument("--redis", help="keep the history features in this Redis (e.g. redis://localhost:6379/0)")
+    parser.add_argument("--workers", type=int, default=1, help="with --redis: threads that share the Redis state")
     args = parser.parse_args()
 
     path = Path(args.csv) if args.csv else find_csv()
     parts = PARTS if args.part == "all" else (args.part,)
     meta = json.loads((Path(args.reference_dir) / META_FILE).read_text(encoding="utf-8"))
     print(f"Replaying {path} ({', '.join(parts)}) ...")
-    run = replay(path, parts, args.reference_dir, args.limit)
+    if args.redis:
+        run = replay_redis(path, args.redis, args.workers, parts, args.reference_dir, args.limit)
+    else:
+        run = replay(path, parts, args.reference_dir, args.limit)
     results = [summarize(run, meta, p) for p in parts]
     for r in results:
         _print(r, run)

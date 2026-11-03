@@ -339,6 +339,64 @@ sync and the feature store add nothing and lose nothing compared with the replay
 higher false-block rate (0.021%) than the test part as a whole (0.0052%), because the rate varies over the log;
 that is the data, not a fault of the pipeline.
 
+## Shared feature state in Redis
+
+By default the scorer keeps its feature state in its own memory: one scorer, and a restart forgets everything (the PaySim
+demo then rereads the file for a minute). `FEATURE_STORE=redis` moves the PaySim model's history features into Redis, so
+any number of scorer replicas share them and a restarted scorer carries on at once.
+
+```bash
+docker compose down
+docker compose -f docker-compose.yml -f docker-compose.paysim.yml -f docker-compose.redis.yml up -d --build --scale scorer=3
+```
+
+(`down` first: the `transactions` topic is created with 3 partitions, and a topic that already exists keeps its count.)
+
+How it works:
+
+- **What is kept.** For every account that has received a payment, the number of payments and their total
+  (`fr:<namespace>:in:<account>`, a hash). That is all the model uses of the history, so it is all that is stored.
+  The four other history columns are never split on by the trained model; the store sends them as missing and refuses
+  a model that does use them. For the PaySim rows before the demo's start that is 2.18 million recipients and about
+  265 MB of Redis.
+- **One script per payment.** A Lua script reads the recipient's state and then adds the payment; Redis runs a script
+  without interleaving, so each payment sees the state just before itself even with several replicas. The scorer sends
+  a whole Kafka batch as one pipeline of scripts and scores it with one model call.
+- **Loaded once.** `docker-compose.redis.yml` runs a `warmup` job that sums the 5.1 million earlier rows per recipient
+  and writes them to Redis (68 s here, nothing on later starts: it is idempotent). The simulator waits for it, saves how
+  far it got, and resumes there after a restart. In this mode it stops at the end of the file instead of looping,
+  because the rows already counted must not be counted twice. Scorers need no CSV.
+- **Payments are keyed by sender**, so three partitions let three scorers each take a share of the topic.
+
+What it was checked against:
+
+| Check | Result |
+|---|---|
+| History features in Redis vs in memory, payment by payment | the same, to 1e-9 (tests, run against a real Redis in CI) |
+| Whole real PaySim test part (1.25 M payments) through Redis, one worker | identical to the notebook: AP 0.99952, 488 and 65 false alarms |
+| Same, 3 threads sharing the Redis state | AP 0.99952; false alarms 485 and 65 |
+| Same, 8 threads | AP 0.99952; false alarms 457 and 64 |
+| Three scorers on three partitions, live | about 40 tx/s each for 120 in total; an injected ring blocked 28 of 28 |
+| Restarting one scorer | back in 12 s (rejoining the consumer group), no file read, no state lost |
+
+Read it with care:
+
+- **What the threads experiment measures.** Payments are dealt to the threads by sender, the way Kafka partitions a
+  topic, and the threads run concurrently, so two payments to the same recipient on different threads reach Redis in
+  whichever order they happen to run. The recall did not change and the false alarms moved by a few percent. But the
+  rows are dealt in file order in chunks, so the threads never drift far apart; partitions that fall unevenly behind
+  could disagree more. The multi-thread runs are not reproducible to the last digit, and each was run once. The replay
+  is limited by reading the CSV in one thread, so its speed (about 30,000 rows/s at every thread count) is not a
+  scaling measurement.
+- **Latency is higher.** With three scorers and Redis the UI showed about 15 ms p50 and 75 ms p99 from publish to
+  decision, against 7 and 9 ms for one in-memory scorer. Nothing here has been tuned; the load test is the next item.
+- **Only the PaySim model's path moved.** The heuristic scorer's feature state is still in memory, and
+  `FEATURE_STORE=redis` with it is refused. One Redis node, no failover. After a crash a payment may be counted twice
+  or not at all. The history features are an approximation across partitions by construction; with one partition or one
+  replica they are exact.
+- Run the Redis tests with `REDIS_URL=redis://localhost:6379/0 pytest`; without a Redis they are skipped. Replay the
+  real file through Redis with `python -m fraudradar.replay --redis redis://localhost:6379/0 --workers 3`.
+
 ## Training-serving skew check
 
 A model scores whatever features it is given, so if the stream feeds it values spread differently from the ones
@@ -472,7 +530,7 @@ How to read it:
 
 - [x] Train a LightGBM model on PaySim and report it honestly (see above)
 - [x] Serve that model in the scorer in place of `HeuristicScorer` (opt in with `SCORER=lightgbm`)
-- [ ] Move feature state to Redis so several scorer replicas can run; use more than one partition
+- [x] Move the PaySim model's feature state to Redis so several scorer replicas can run, on a 3-partition topic (see above); the heuristic's state is still in memory
 - [x] Replay the real PaySim log through the serving code and compare with the notebook (see above)
 - [x] Benchmark on real card payments (IEEE-CIS), see above
 - [x] Demo on the real PaySim log (`docker-compose.paysim.yml`)
@@ -500,6 +558,8 @@ src/fraudradar/
   skew.py        training-serving skew check
   replay.py      replays the real PaySim log through the serving code
   paysim_stream.py  the PaySim log as the demo's live traffic
+  redis_features.py the PaySim model's history features in Redis (shared by scorer replicas)
+  paysim_warmup.py  loads the history before the demo's start into Redis, once
   serving.py     builds the engine for a scorer name
   engine.py      features -> score -> action
   evaluate.py    offline replay and metrics
