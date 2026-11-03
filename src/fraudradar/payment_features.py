@@ -36,6 +36,18 @@ NAN = float("nan")
 
 
 @dataclass(slots=True)
+class History:
+    """The per-account state a payment's history features are made from, as it stood before the payment."""
+
+    out_count: float = 0.0  # payments the sender made earlier
+    dst_count: float = 0.0  # payments the recipient received earlier
+    dst_total: float = 0.0  # their total, in model units
+    src_count: float = 0.0  # payments the sender itself received earlier
+    src_last_step: float | None = None  # hour of the last one, None if there was none
+    src_last_amount: float = 0.0
+
+
+@dataclass(slots=True)
 class _Inbound:
     count: int = 0
     total: float = 0.0  # scaled money received so far
@@ -72,12 +84,26 @@ class PaymentFeatureStore:
     def _step(self, tx: Transaction) -> int:
         return tx.step if tx.step is not None else tx.ts // self.sim_hour_ms
 
+    def _history(self, tx: Transaction) -> History:
+        """What was known about the two accounts before `tx`. A subclass can keep this elsewhere."""
+        sent_to = self._inbound.get(tx.dst)
+        received = self._inbound.get(tx.src)
+        return History(
+            out_count=float(self._out_count.get(tx.src, 0)),
+            dst_count=float(sent_to.count) if sent_to else 0.0,
+            dst_total=sent_to.total if sent_to else 0.0,
+            src_count=float(received.count) if received else 0.0,
+            src_last_step=float(received.last_step) if received else None,
+            src_last_amount=received.last_amount if received else 0.0,
+        )
+
     def columns(self, tx: Transaction) -> dict[str, float]:
+        return self.assemble(tx, self._history(tx))
+
+    def assemble(self, tx: Transaction, h: History) -> dict[str, float]:
         scale = self.amount_scale
         amount = tx.amount * scale
         step = self._step(tx)
-        sent_to = self._inbound.get(tx.dst)
-        received = self._inbound.get(tx.src)
 
         if tx.src_balance is None:
             to_oldbal = drains = orig_zero = NAN
@@ -88,12 +114,11 @@ class PaymentFeatureStore:
             orig_zero = float(old_orig == 0)
         dest_zero = NAN if tx.dst_balance is None else float(tx.dst_balance == 0)
 
-        if received is None:
-            recv_count, since, to_last = 0.0, NAN, NAN
+        if h.src_last_step is None:
+            since, to_last = NAN, NAN
         else:
-            recv_count = float(received.count)
-            since = float(step - received.last_step)
-            to_last = RATIO_CAP if received.last_amount <= 0 else min(amount / received.last_amount, RATIO_CAP)
+            since = float(step - h.src_last_step)
+            to_last = RATIO_CAP if h.src_last_amount <= 0 else min(amount / h.src_last_amount, RATIO_CAP)
 
         return {
             "type": self._type_code.get(tx.kind or "", NAN),
@@ -104,10 +129,10 @@ class PaymentFeatureStore:
             "dest_old_zero": dest_zero,
             "dest_is_merchant": float(tx.dst_merchant),
             "hour": float(step % 24),
-            "orig_prior_out": float(self._out_count.get(tx.src, 0)),
-            "dest_prior_in": float(sent_to.count if sent_to else 0),
-            "dest_prior_in_sum_log": math.log1p(sent_to.total if sent_to else 0.0),
-            "recv_count": recv_count,
+            "orig_prior_out": h.out_count,
+            "dest_prior_in": h.dst_count,
+            "dest_prior_in_sum_log": math.log1p(h.dst_total),
+            "recv_count": h.src_count,
             "steps_since_recv": since,
             "amount_to_last_recv": to_last,
         }

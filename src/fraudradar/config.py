@@ -15,6 +15,8 @@ class Settings:
     seed: int
     scorer: str  # "heuristic" or "lightgbm"
     data_source: str  # "synthetic" or "paysim" (replay the real log)
+    feature_store: str  # "memory" (in the scorer process) or "redis" (shared, survives restarts)
+    redis_url: str
     paysim_csv: str  # the PaySim file, or the folder that holds it
     paysim_start_step: int | None  # None: the first hour after the model's validation part
     block_threshold: float | None  # None: the scorer's own default
@@ -33,6 +35,8 @@ class Settings:
             seed=int(env("SIM_SEED", "7")),
             scorer=env("SCORER", "heuristic"),
             data_source=env("DATA_SOURCE", "synthetic"),
+            feature_store=env("FEATURE_STORE", "memory"),
+            redis_url=env("REDIS_URL", "redis://redis:6379/0"),
             paysim_csv=env("PAYSIM_CSV", "/data"),
             paysim_start_step=int(env("PAYSIM_START_STEP")) if env("PAYSIM_START_STEP") else None,
             block_threshold=float(env("BLOCK_THRESHOLD")) if env("BLOCK_THRESHOLD") else None,

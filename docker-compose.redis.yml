@@ -1,0 +1,63 @@
+# Keep the feature state in Redis instead of the scorer's memory, so several scorers can share one topic.
+# Combine it with the PaySim demo:
+#
+#   docker compose down
+#   docker compose -f docker-compose.yml -f docker-compose.paysim.yml -f docker-compose.redis.yml up -d --build --scale scorer=3
+#
+# `down` first: the `transactions` topic must be created with 3 partitions, and a topic that already exists keeps
+# its old count. `warmup` loads the history of the PaySim rows before the demo's start into Redis once (about a
+# minute and a half the first time, nothing after that); the simulator waits for it. The scorers need no CSV.
+# Redis keeps its data in a volume, so a restart carries on where it stopped; `docker compose down -v` starts over.
+x-redis-env: &redis_env
+  FEATURE_STORE: redis
+  REDIS_URL: redis://redis:6379/0
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--save", ""]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  topics-init:
+    # Payments are keyed by sender, so three partitions let three scorers each take a share.
+    command:
+      - rpk topic create transactions --brokers redpanda:9092 --partitions 3 --replicas 1 || true;
+        rpk topic create decisions control --brokers redpanda:9092 --partitions 1 --replicas 1 || true
+
+  warmup:
+    build: .
+    command: ["python", "-m", "fraudradar.paysim_warmup"]
+    environment:
+      <<: *redis_env
+      DATA_SOURCE: paysim
+      PAYSIM_CSV: /data
+    volumes:
+      - ./src:/app/src
+      - ./training/data:/data:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "no"
+
+  simulator:
+    environment:
+      <<: *redis_env
+    depends_on:
+      warmup:
+        condition: service_completed_successfully
+
+  scorer:
+    environment:
+      <<: *redis_env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  redis-data:

@@ -29,6 +29,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from . import geo
+from .generator import EndOfLog
 from .lgbm import ARTIFACT_DIR, META_FILE
 from .replay import UNKNOWN_AGE_DAYS, transactions
 from .schemas import Transaction
@@ -107,27 +108,44 @@ def warm_up(engine, path: str | Path, upto: int) -> int:
 
 
 class PaysimSource:
-    """Looks like `TransactionGenerator` to the simulator: `legit(ts)` and `ring(ts, size)`."""
+    """Looks like `TransactionGenerator` to the simulator: `legit(ts)` and `ring(ts, size)`.
 
-    def __init__(self, csv: str | Path, start_step: int | None = None, seed: int = 7) -> None:
+    `loop=False` stops at the end of the file instead of starting over: with the feature state kept in Redis
+    the rows already counted there must not be counted twice. `resume_index` continues from a row after a restart.
+    """
+
+    def __init__(
+        self,
+        csv: str | Path,
+        start_step: int | None = None,
+        seed: int = 7,
+        resume_index: int | None = None,
+        loop: bool = True,
+    ) -> None:
         self.csv = resolve_csv(csv)
         self.start_step = default_start_step() if start_step is None else start_step
         self.start_index = first_index_of_step(self.csv, self.start_step)
         self.placement = Placement()
         self.rng = random.Random(seed)
         self.step = self.start_step  # the hour the stream is in, so injected payments carry it too
+        self.loop = loop
         self.loops = 0
+        self.next_index = max(self.start_index, resume_index or 0)  # the row `legit` will return next
         self._attacks = 0
-        self._rows = live_rows(self.csv, self.start_index, self.placement)
+        self._rows = live_rows(self.csv, self.next_index, self.placement)
 
     def legit(self, ts: int) -> Transaction:
         """The next row of the file, stamped with the wall-clock time it is published at."""
         try:
             tx = next(self._rows)
         except StopIteration:
+            if not self.loop:
+                raise EndOfLog from None
             self.loops += 1
+            self.next_index = self.start_index
             self._rows = live_rows(self.csv, self.start_index, self.placement)
             tx = next(self._rows)
+        self.next_index += 1
         tx.ts = ts
         self.step = tx.step
         return tx

@@ -79,6 +79,27 @@ class LightGBMScorer:
             raise ValueError("model file and metadata disagree about the feature list")
         return cls(booster, meta)
 
+    def unused_features(self) -> list[str]:
+        """Features no tree splits on: whatever value they get, the score is the same."""
+        counts = self.booster.feature_importance("split")
+        return [name for name, n in zip(self.feature_names, counts) if n == 0]
+
+    def _reasons(self, contrib: np.ndarray, x_row: np.ndarray) -> list[str]:
+        order = np.argsort(contrib)[::-1][:3]
+        return [_explain(self.feature_names[i], float(x_row[i])) for i in order if contrib[i] >= EXPLAIN_MIN]
+
+    def score_many(self, rows: list[np.ndarray]) -> list[tuple[float, list[str]]]:
+        """`score` for many payments at once, one prediction call; only flagged ones pay for an explanation."""
+        x = np.vstack(rows)
+        p = self.booster.predict(x)
+        out: list[tuple[float, list[str]]] = [(float(v), []) for v in p]
+        hot = np.flatnonzero(p >= self._explain_from)
+        if len(hot):
+            contrib = self.booster.predict(x[hot], pred_contrib=True)[:, :-1]
+            for k, i in enumerate(hot):
+                out[i] = (out[i][0], self._reasons(contrib[k], x[i]))
+        return out
+
     def score_batch(self, x: np.ndarray) -> np.ndarray:
         """Probabilities for many rows at once; `score` row by row gives the same numbers."""
         return self.booster.predict(x)
@@ -88,10 +109,7 @@ class LightGBMScorer:
         if p < self._explain_from:
             return p, []
         contrib = self.booster.predict(x, pred_contrib=True, num_threads=1)[0][:-1]  # last is the bias
-        order = np.argsort(contrib)[::-1][:3]
-        return p, [
-            _explain(self.feature_names[i], float(x[0, i])) for i in order if contrib[i] >= EXPLAIN_MIN
-        ]
+        return p, self._reasons(contrib, x[0])
 
 
 def load_lightgbm_engine(
@@ -99,9 +117,20 @@ def load_lightgbm_engine(
     block: float | None = None,
     review: float | None = None,
     amount_scale: float = AMOUNT_SCALE,
+    redis_client=None,
+    namespace: str = "ps",
 ) -> ScoringEngine:
+    """With `redis_client` the history features live in Redis (see redis_features), otherwise in this process."""
     scorer = LightGBMScorer.load(directory)
-    store = PaymentFeatureStore(scorer.feature_names, scorer.meta["type_categories"], amount_scale=amount_scale)
+    categories = scorer.meta["type_categories"]
+    if redis_client is None:
+        store = PaymentFeatureStore(scorer.feature_names, categories, amount_scale=amount_scale)
+    else:
+        from .redis_features import RedisPaymentFeatureStore
+
+        store = RedisPaymentFeatureStore(
+            redis_client, scorer.feature_names, categories, scorer.unused_features(), namespace, amount_scale
+        )
     return ScoringEngine(
         store,
         scorer,
