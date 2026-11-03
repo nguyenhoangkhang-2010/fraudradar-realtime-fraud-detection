@@ -1,0 +1,526 @@
+{
+ "scenario": "evasion",
+ "from_step": 450,
+ "windows": [
+  {
+   "hours": [
+    356,
+    379
+   ],
+   "payments": 371878,
+   "fraud": 260,
+   "flagged": 458,
+   "flag_rate": 0.0012315867031660922,
+   "flag_rate_z": -2.6577556633898036e-15,
+   "worst_psi": 0.030184898998067377,
+   "worst_feature": "hour",
+   "features_different": [],
+   "psi": {
+    "type": 0.0002646673274745015,
+    "amount_log": 0.007837865714841283,
+    "amount_to_oldbal": 0.0014944640079545064,
+    "drains_account": 0.00021549438186082106,
+    "orig_old_zero": 4.880920848335226e-05,
+    "dest_old_zero": 0.00020191093191797302,
+    "dest_is_merchant": 4.58366113051939e-05,
+    "hour": 0.030184898998067377,
+    "dest_prior_in": 0.0010847439142711007,
+    "dest_prior_in_sum_log": 0.0028641542896349725
+   },
+   "average_precision": 0.9999257477118939,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    380,
+    403
+   ],
+   "payments": 420109,
+   "fraud": 298,
+   "flagged": 458,
+   "flag_rate": 0.001090193259368402,
+   "flag_rate_z": -2.613035860475024,
+   "worst_psi": 0.02037438067349434,
+   "worst_feature": "amount_log",
+   "features_different": [],
+   "psi": {
+    "type": 0.00018896206357229013,
+    "amount_log": 0.02037438067349434,
+    "amount_to_oldbal": 0.003930904747230124,
+    "drains_account": 0.001059156466813784,
+    "orig_old_zero": 0.00048705955572834396,
+    "dest_old_zero": 2.0153567874563185e-06,
+    "dest_is_merchant": 0.00018697187389227752,
+    "hour": 0.013088809941890829,
+    "dest_prior_in": 0.0010268345338550037,
+    "dest_prior_in_sum_log": 0.0025534232138146335
+   },
+   "average_precision": 0.9985124222583975,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    404,
+    427
+   ],
+   "payments": 95699,
+   "fraud": 308,
+   "flagged": 317,
+   "flag_rate": 0.0033124693047994233,
+   "flag_rate_z": 18.354239046248804,
+   "worst_psi": 3.561227458447507,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.02641076080799098,
+    "amount_log": 0.02478324281165091,
+    "amount_to_oldbal": 0.0158335335200057,
+    "drains_account": 0.004735213372660789,
+    "orig_old_zero": 0.0013497722870413182,
+    "dest_old_zero": 0.012454310599546754,
+    "dest_is_merchant": 0.020883025905190703,
+    "hour": 3.561227458447507,
+    "dest_prior_in": 0.00897431999025799,
+    "dest_prior_in_sum_log": 0.011207298638890119
+   },
+   "average_precision": 0.999978951301294,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    428,
+    451
+   ],
+   "payments": 16898,
+   "fraud": 232,
+   "flagged": 218,
+   "flag_rate": 0.012900935021896083,
+   "flag_rate_z": 43.2513194626579,
+   "worst_psi": 1.904089667652384,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.021713323598124272,
+    "amount_log": 0.03985291012374652,
+    "amount_to_oldbal": 0.052353798125374565,
+    "drains_account": 0.0012335370373540756,
+    "orig_old_zero": 0.02652320988547828,
+    "dest_old_zero": 0.009990389216488938,
+    "dest_is_merchant": 0.008910951464350786,
+    "hour": 1.904089667652384,
+    "dest_prior_in": 0.007290382319246058,
+    "dest_prior_in_sum_log": 0.010282203698204503
+   },
+   "average_precision": 0.948210547970587,
+   "recall_at_review": 0.9353448275862069
+  },
+  {
+   "hours": [
+    452,
+    475
+   ],
+   "payments": 14392,
+   "fraud": 254,
+   "flagged": 41,
+   "flag_rate": 0.002848804891606448,
+   "flag_rate_z": 5.531772322329644,
+   "worst_psi": 2.5455762716135535,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.0064565018911037315,
+    "amount_log": 0.006441572738617847,
+    "amount_to_oldbal": 0.010281834593690038,
+    "drains_account": 0.0030589062629811973,
+    "orig_old_zero": 0.007828731183656424,
+    "dest_old_zero": 0.0019211397181877286,
+    "dest_is_merchant": 3.337697023437835e-05,
+    "hour": 2.5455762716135535,
+    "dest_prior_in": 0.000782331018669145,
+    "dest_prior_in_sum_log": 0.003100002124540446
+   },
+   "average_precision": 0.2714209453079412,
+   "recall_at_review": 0.14566929133858267
+  },
+  {
+   "hours": [
+    476,
+    499
+   ],
+   "payments": 22839,
+   "fraud": 242,
+   "flagged": 62,
+   "flag_rate": 0.0027146547572135383,
+   "flag_rate_z": 6.390498351311353,
+   "worst_psi": 1.810350798220209,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.015089000276058888,
+    "amount_log": 0.004431944355924004,
+    "amount_to_oldbal": 0.01051709883414734,
+    "drains_account": 0.00215011748383848,
+    "orig_old_zero": 0.007492901177870201,
+    "dest_old_zero": 0.004232029543484493,
+    "dest_is_merchant": 0.0018890516182933838,
+    "hour": 1.810350798220209,
+    "dest_prior_in": 0.0033347664088641906,
+    "dest_prior_in_sum_log": 0.005947712012514334
+   },
+   "average_precision": 0.23528049128195597,
+   "recall_at_review": 0.15702479338842976
+  },
+  {
+   "hours": [
+    500,
+    523
+   ],
+   "payments": 44983,
+   "fraud": 282,
+   "flagged": 129,
+   "flag_rate": 0.0028677500389035857,
+   "flag_rate_z": 9.89432038997283,
+   "worst_psi": 2.6015552257840553,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.0021819494272825794,
+    "amount_log": 0.0012313106737769303,
+    "amount_to_oldbal": 0.0025053489152423885,
+    "drains_account": 0.0007731082362014406,
+    "orig_old_zero": 0.0019000300034175159,
+    "dest_old_zero": 0.0010115907110869854,
+    "dest_is_merchant": 3.977657797495824e-05,
+    "hour": 2.6015552257840553,
+    "dest_prior_in": 0.001510007148446043,
+    "dest_prior_in_sum_log": 0.004200058185540106
+   },
+   "average_precision": 0.25968677136867224,
+   "recall_at_review": 0.20567375886524822
+  },
+  {
+   "hours": [
+    524,
+    547
+   ],
+   "payments": 54202,
+   "fraud": 204,
+   "flagged": 38,
+   "flag_rate": 0.0007010811409173093,
+   "flag_rate_z": -3.5215406219791774,
+   "worst_psi": 0.6526461816433242,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.011877831067674547,
+    "amount_log": 0.006787181851709211,
+    "amount_to_oldbal": 0.0072320992511653295,
+    "drains_account": 0.0010366398321700315,
+    "orig_old_zero": 0.004560493198166298,
+    "dest_old_zero": 0.002852654705073312,
+    "dest_is_merchant": 0.0023149638453869074,
+    "hour": 0.6526461816433242,
+    "dest_prior_in": 0.0030585727124074597,
+    "dest_prior_in_sum_log": 0.004890162137332442
+   },
+   "average_precision": 0.1300431220626858,
+   "recall_at_review": 0.09803921568627451
+  },
+  {
+   "hours": [
+    548,
+    571
+   ],
+   "payments": 39306,
+   "fraud": 278,
+   "flagged": 50,
+   "flag_rate": 0.0012720704218185518,
+   "flag_rate_z": 0.22884684409972478,
+   "worst_psi": 0.6269931249928131,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.008145011331924632,
+    "amount_log": 0.008316355753745149,
+    "amount_to_oldbal": 0.012827680585642232,
+    "drains_account": 0.0006251644183965221,
+    "orig_old_zero": 0.009631385648588332,
+    "dest_old_zero": 0.006278656006746044,
+    "dest_is_merchant": 0.0041742604372926265,
+    "hour": 0.6269931249928131,
+    "dest_prior_in": 0.004450756044744059,
+    "dest_prior_in_sum_log": 0.0065423395681312125
+   },
+   "average_precision": 0.21988211227276477,
+   "recall_at_review": 0.15467625899280577
+  },
+  {
+   "hours": [
+    572,
+    595
+   ],
+   "payments": 50284,
+   "fraud": 250,
+   "flagged": 43,
+   "flag_rate": 0.0008551427889587145,
+   "flag_rate_z": -2.4068570337236426,
+   "worst_psi": 0.6294861330361916,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.002738522111639017,
+    "amount_log": 0.003357530990802492,
+    "amount_to_oldbal": 0.010261028381258641,
+    "drains_account": 0.003978496489762264,
+    "orig_old_zero": 0.0065778217537535094,
+    "dest_old_zero": 0.0011491445873833784,
+    "dest_is_merchant": 4.9147806268258645e-06,
+    "hour": 0.6294861330361916,
+    "dest_prior_in": 0.0011043042662135512,
+    "dest_prior_in_sum_log": 0.0023645677425487006
+   },
+   "average_precision": 0.16865306633902621,
+   "recall_at_review": 0.116
+  },
+  {
+   "hours": [
+    596,
+    619
+   ],
+   "payments": 27309,
+   "fraud": 268,
+   "flagged": 51,
+   "flag_rate": 0.0018675162034494123,
+   "flag_rate_z": 2.99638059286376,
+   "worst_psi": 2.0166692795056655,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.02666121958125231,
+    "amount_log": 0.036090772468117344,
+    "amount_to_oldbal": 0.034458440357214945,
+    "drains_account": 0.0025038660782742733,
+    "orig_old_zero": 0.0158892550850608,
+    "dest_old_zero": 0.012178094100427167,
+    "dest_is_merchant": 0.010951179234261246,
+    "hour": 2.0166692795056655,
+    "dest_prior_in": 0.007282046735363255,
+    "dest_prior_in_sum_log": 0.010103983488598357
+   },
+   "average_precision": 0.2551609505649811,
+   "recall_at_review": 0.16791044776119404
+  },
+  {
+   "hours": [
+    620,
+    643
+   ],
+   "payments": 7406,
+   "fraud": 262,
+   "flagged": 47,
+   "flag_rate": 0.006346205779098029,
+   "flag_rate_z": 12.549899636726868,
+   "worst_psi": 2.5322722692219175,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.012833983136293884,
+    "amount_log": 0.00338133902974837,
+    "amount_to_oldbal": 0.028947378733438722,
+    "drains_account": 0.0036268132787784773,
+    "orig_old_zero": 0.02864601514263938,
+    "dest_old_zero": 0.004326857928479252,
+    "dest_is_merchant": 0.00012512814593398447,
+    "hour": 2.5322722692219175,
+    "dest_prior_in": 0.0026100679715830434,
+    "dest_prior_in_sum_log": 0.006449804838221034
+   },
+   "average_precision": 0.39356261249974733,
+   "recall_at_review": 0.17557251908396945
+  },
+  {
+   "hours": [
+    644,
+    667
+   ],
+   "payments": 14575,
+   "fraud": 258,
+   "flagged": 61,
+   "flag_rate": 0.0041852487135506005,
+   "flag_rate_z": 10.167172305009435,
+   "worst_psi": 1.9924883680082597,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.013435591886104555,
+    "amount_log": 0.007671363477443257,
+    "amount_to_oldbal": 0.01670713410155978,
+    "drains_account": 0.0014845044310839522,
+    "orig_old_zero": 0.01735836109817876,
+    "dest_old_zero": 0.003795181492078351,
+    "dest_is_merchant": 0.00016501005181939295,
+    "hour": 1.9924883680082597,
+    "dest_prior_in": 0.0024979359891396796,
+    "dest_prior_in_sum_log": 0.004936514006976894
+   },
+   "average_precision": 0.28811385183675486,
+   "recall_at_review": 0.17829457364341086
+  },
+  {
+   "hours": [
+    668,
+    691
+   ],
+   "payments": 44898,
+   "fraud": 250,
+   "flagged": 108,
+   "flag_rate": 0.002405452358679674,
+   "flag_rate_z": 7.091971782695871,
+   "worst_psi": 1.6275566885836077,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.005938501187630082,
+    "amount_log": 0.00472461968030677,
+    "amount_to_oldbal": 0.008675057622450423,
+    "drains_account": 0.006549707998619531,
+    "orig_old_zero": 0.005704007696013238,
+    "dest_old_zero": 0.00019767099496680656,
+    "dest_is_merchant": 0.000914028428003637,
+    "hour": 1.6275566885836077,
+    "dest_prior_in": 0.00032137066844419135,
+    "dest_prior_in_sum_log": 0.0020360216043533224
+   },
+   "average_precision": 0.31834634725309713,
+   "recall_at_review": 0.272
+  },
+  {
+   "hours": [
+    692,
+    715
+   ],
+   "payments": 21972,
+   "fraud": 272,
+   "flagged": 59,
+   "flag_rate": 0.0026852357545967594,
+   "flag_rate_z": 6.143692480667674,
+   "worst_psi": 2.3671316823368667,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "psi": {
+    "type": 0.008562287682977699,
+    "amount_log": 0.011372913159188754,
+    "amount_to_oldbal": 0.10028067845681485,
+    "drains_account": 0.041711159759684695,
+    "orig_old_zero": 0.09797785409560013,
+    "dest_old_zero": 0.011943997772262708,
+    "dest_is_merchant": 0.0010272901847388804,
+    "hour": 2.3671316823368667,
+    "dest_prior_in": 0.008571708306836262,
+    "dest_prior_in_sum_log": 0.011966717382118066
+   },
+   "average_precision": 0.31165718423427097,
+   "recall_at_review": 0.20220588235294118
+  },
+  {
+   "hours": [
+    716,
+    739
+   ],
+   "payments": 1936,
+   "fraud": 282,
+   "flagged": 51,
+   "flag_rate": 0.02634297520661157,
+   "flag_rate_z": 31.50347841015527,
+   "worst_psi": 2.991125188110189,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "amount_to_oldbal",
+    "orig_old_zero",
+    "dest_old_zero",
+    "hour"
+   ],
+   "psi": {
+    "type": 0.21829604851026052,
+    "amount_log": 0.2584500199757692,
+    "amount_to_oldbal": 1.069430281431559,
+    "drains_account": 0.027369042289731242,
+    "orig_old_zero": 2.0311882839109203,
+    "dest_old_zero": 0.3004554738013898,
+    "dest_is_merchant": 0.10907254867470331,
+    "hour": 2.991125188110189,
+    "dest_prior_in": 0.23932639122307733,
+    "dest_prior_in_sum_log": 0.24387365565661312
+   },
+   "average_precision": 0.6524685355321571,
+   "recall_at_review": 0.18085106382978725
+  },
+  {
+   "hours": [
+    740,
+    743
+   ],
+   "payments": 50,
+   "fraud": 50,
+   "flagged": 14,
+   "flag_rate": 0.28,
+   "flag_rate_z": 56.20353993260621,
+   "worst_psi": 7.287926429515437,
+   "worst_feature": "hour",
+   "features_different": [
+    "type",
+    "amount_log",
+    "amount_to_oldbal",
+    "drains_account",
+    "orig_old_zero",
+    "dest_old_zero",
+    "dest_is_merchant",
+    "hour",
+    "dest_prior_in",
+    "dest_prior_in_sum_log"
+   ],
+   "psi": {
+    "type": 5.246067359592483,
+    "amount_log": 2.0410523566430374,
+    "amount_to_oldbal": 6.68227605414908,
+    "drains_account": 2.5744463065016228,
+    "orig_old_zero": 0.9885889339248879,
+    "dest_old_zero": 0.3233084539604131,
+    "dest_is_merchant": 2.874020972788237,
+    "hour": 7.287926429515437,
+    "dest_prior_in": 0.9723663904425864,
+    "dest_prior_in_sum_log": 0.34269052975218117
+   },
+   "average_precision": 1.0,
+   "recall_at_review": 0.28
+  }
+ ],
+ "retrains": []
+}

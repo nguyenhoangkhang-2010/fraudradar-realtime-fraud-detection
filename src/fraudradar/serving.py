@@ -28,8 +28,9 @@ def build_engine(
     redis_url: str | None = None,
     namespace: str = "ps",
     num_threads: int = 1,
+    directory=None,
 ) -> ScoringEngine:
-    """`amount_scale` only matters to the LightGBM scorer: None keeps the simulator's calibration, 1.0 means
+    """`directory` is the model folder (default: the bundled model). `amount_scale` only matters to the LightGBM scorer: None keeps the simulator's calibration, 1.0 means
     the amounts are already in PaySim's units (a replay of the real log)."""
     if scorer == "heuristic":
         if redis_url:
@@ -49,5 +50,7 @@ def build_engine(
         if redis_url:
             extra["redis_client"] = connect_redis(redis_url)
             extra["namespace"] = namespace
+        if directory is not None:
+            extra["directory"] = directory
         return load_lightgbm_engine(block=block, review=review, **extra)
     raise ValueError(f"unknown scorer {scorer!r}; choose one of {SCORERS}")

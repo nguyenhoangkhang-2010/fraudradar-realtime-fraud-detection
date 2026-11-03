@@ -80,6 +80,54 @@ def psi(reference: np.ndarray, live: np.ndarray) -> float:
     return float(np.sum((cur - ref) * np.log(cur / ref)))
 
 
+QUANTILES = [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]
+MAX_DISCRETE = 12  # a feature with this many distinct values or fewer gets one bin per value
+
+
+def build_reference(matrix: np.ndarray, fraud: np.ndarray, names: list[str], type_categories: list[str], rows_of: str = "train") -> dict:
+    """`reference_stats.json` for a model trained on `matrix` (one row per payment), as the notebook writes it.
+
+    The bins are cut here, from these rows: deciles for continuous features, one bin per value for flags and small
+    counts. Pass the float32 matrix the model was trained on, so the cuts equal the notebook's.
+    """
+    fraud = np.asarray(fraud, dtype=bool)
+    features = {}
+    for j, col in enumerate(names):
+        x = np.asarray(matrix[:, j], dtype=np.float64)
+        entry: dict = {}
+        if col == "type":
+            codes = np.where(np.isnan(x), -1, x).astype(np.int64)
+            codes = np.where((codes >= 0) & (codes < len(type_categories)), codes, -1)
+            n = len(type_categories)
+            entry["kind"], entry["bins"] = "categorical", list(type_categories)
+        else:
+            finite = x[~np.isnan(x)]
+            distinct = np.unique(finite)
+            if len(distinct) <= MAX_DISCRETE:
+                at = np.minimum(np.searchsorted(distinct, x), len(distinct) - 1)
+                codes = np.where(np.isnan(x), -1, np.where(distinct[at] == x, at, len(distinct)))
+                n = len(distinct) + 1
+                entry["kind"], entry["values"] = "discrete", distinct.tolist()
+            else:
+                edges = np.unique(np.quantile(finite, np.linspace(0.1, 0.9, 9)))
+                codes = np.where(np.isnan(x), -1, np.searchsorted(edges, x, side="right"))
+                n = len(edges) + 1
+                entry["kind"], entry["edges"] = "numeric", edges.tolist()
+        for group, mask in (("all", np.ones(len(codes), bool)), ("fraud", fraud)):
+            c = codes[mask]
+            present = c[c >= 0]
+            entry[f"share_{group}"] = (np.bincount(present, minlength=n) / max(1, len(present))).tolist()
+            entry[f"missing_{group}"] = float((c < 0).mean()) if len(c) else 0.0
+            if col != "type":
+                xs = x[mask][~np.isnan(x[mask])]
+                entry[f"quantiles_{group}"] = np.quantile(xs, QUANTILES).tolist() if len(xs) else []
+        features[col] = entry
+    return {
+        "split": rows_of, "rows": int(len(matrix)), "fraud_rows": int(fraud.sum()),
+        "quantiles": QUANTILES, "features": features,
+    }
+
+
 def verdict(value: float) -> str:
     return "close" if value < MODERATE else "moved" if value < LARGE else "DIFFERENT"
 

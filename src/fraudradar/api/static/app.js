@@ -996,6 +996,17 @@
     $("k-pr").textContent = `${pct(s.precision)} / ${pct(s.recall)}`;
   }
 
+  // Model health from the scorers' drift monitors: hidden until one reports (the heuristic scorer has none).
+  const HEALTH_LABEL = { ok: "model healthy", watch: "model: watch inputs", drift: "model drifting", "warming up": "model: warming up" };
+  function renderHealth(m) {
+    const el = $("health");
+    if (!m) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = `${m.models.join(", ")} · ${HEALTH_LABEL[m.status] || m.status}`;
+    el.className = "conn " + (m.status === "ok" ? "on" : m.status === "drift" ? "bad" : "off");
+    el.title = m.reasons.length ? m.reasons.join("; ") : "inputs and flag rate look like the training data";
+  }
+
   function connect() {
     const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
     ws.onopen = () => { $("conn").textContent = "live"; $("conn").className = "conn on"; };
@@ -1008,6 +1019,7 @@
       if (msg.type !== "tick") return;
       const now = performance.now();
       renderKpis(msg.stats);
+      renderHealth(msg.model);
       onScenario(msg, now); // first, so a new incident clears the network before this tick's items land in it
       for (const it of msg.items) addArc(it, now);
       graphIngest(msg.items, now);

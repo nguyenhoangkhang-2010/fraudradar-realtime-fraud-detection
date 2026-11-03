@@ -66,6 +66,12 @@ class RedisPaymentFeatureStore(PaymentFeatureStore):
         self.namespace = namespace
         self._fused = client.register_script(FUSED)
 
+    def check_model(self, scorer) -> None:
+        super().check_model(scorer)
+        needed = [n for n in UNTRACKED if n in self.feature_names and n not in set(scorer.unused_features())]
+        if needed:
+            raise ValueError(f"the new model splits on {needed}, which the Redis store does not keep")
+
     def _history(self, tx: Transaction) -> History:
         n, total = self.client.hmget(in_key(self.namespace, tx.dst), "n", "sum")
         return History(dst_count=float(n or 0), dst_total=float(total or 0.0))
