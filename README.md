@@ -7,6 +7,8 @@ A real-time fraud detection system, built end to end: payments stream through Ka
 point-in-time streaming features and a LightGBM model, and show up on a live map you can drill into from the world
 down to a city's districts. A button injects a fraud ring so you can watch the system find it.
 
+Write-up: [Six times my fraud detector's numbers were wrong](docs/blog/building-fraudradar.md), what each check against reality found.
+
 ![A fraud ring is detected and contained on the live map](docs/img/attack.gif)
 
 *The real PaySim log streaming through the system while an injected attack is blocked. PaySim has no locations, so
