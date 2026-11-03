@@ -46,6 +46,7 @@ async def main() -> None:
             amount_scale=1.0 if paysim else None,
             redis_url=settings.redis_url if use_redis else None,
             namespace=settings.data_source,
+            num_threads=settings.lgbm_threads,
         )
 
     engine = new_engine()

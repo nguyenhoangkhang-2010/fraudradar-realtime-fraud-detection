@@ -1,0 +1,21 @@
+# The load generator, run inside the Compose network so it shares the scorers' clock:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.paysim.yml -f docker-compose.loadtest.yml \
+#     run --rm loadtest python -m fraudradar.loadtest --rates 250,500,1000 --duration 15
+#
+# Stop the simulator and the api first (`docker compose stop simulator api`) so nothing else competes for the
+# scorers. `scripts/load_matrix.py` does all of this for each scorer configuration and collects the results.
+services:
+  loadtest:
+    build: .
+    profiles: ["loadtest"]
+    environment:
+      KAFKA_BOOTSTRAP: redpanda:9092
+      PAYSIM_CSV: /data
+    volumes:
+      - ./src:/app/src
+      - ./training/data:/data:ro
+      - ./docs/results/load_test:/out
+    depends_on:
+      topics-init:
+        condition: service_completed_successfully

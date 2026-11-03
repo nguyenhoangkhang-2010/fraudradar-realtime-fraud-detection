@@ -27,6 +27,7 @@ def build_engine(
     amount_scale: float | None = None,
     redis_url: str | None = None,
     namespace: str = "ps",
+    num_threads: int = 1,
 ) -> ScoringEngine:
     """`amount_scale` only matters to the LightGBM scorer: None keeps the simulator's calibration, 1.0 means
     the amounts are already in PaySim's units (a replay of the real log)."""
@@ -42,7 +43,9 @@ def build_engine(
     if scorer == "lightgbm":
         from .lgbm import load_lightgbm_engine
 
-        extra = {} if amount_scale is None else {"amount_scale": amount_scale}
+        extra = {"num_threads": num_threads}
+        if amount_scale is not None:
+            extra["amount_scale"] = amount_scale
         if redis_url:
             extra["redis_client"] = connect_redis(redis_url)
             extra["namespace"] = namespace

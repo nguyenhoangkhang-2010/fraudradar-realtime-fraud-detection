@@ -16,7 +16,9 @@ places are assigned from account names; the map is decoration, the scores are no
 
 - **A streaming ML system, not a notebook.** Redpanda (Kafka) feeds a scorer that builds features from the state
   *before* each payment, scores with LightGBM, and publishes decisions; a FastAPI gateway pushes them over
-  WebSocket to the map. About 7 ms from event to decision at 120 tx/s on a laptop (one observation, not a load test).
+  WebSocket to the map. About 7 ms from event to decision at 120 tx/s on a laptop; in the [load test](#load-test) one
+  scorer kept up with 12,000 to 16,000 payments a second and three with at least 24,000 (one machine, so a comparison of the pieces,
+  not a cluster figure).
 - **Evaluation that checks itself.** The same model is measured on a simulation and on real data, and the two
   results are reported side by side, with the weaknesses written next to them.
 
@@ -388,8 +390,11 @@ Read it with care:
   could disagree more. The multi-thread runs are not reproducible to the last digit, and each was run once. The replay
   is limited by reading the CSV in one thread, so its speed (about 30,000 rows/s at every thread count) is not a
   scaling measurement.
-- **Latency is higher.** With three scorers and Redis the UI showed about 15 ms p50 and 75 ms p99 from publish to
-  decision, against 7 and 9 ms for one in-memory scorer. Nothing here has been tuned; the load test is the next item.
+- **Latency was higher, and the [load test](#load-test) found why.** With three scorers and Redis the UI showed about
+  15 ms p50 and 75 ms p99 from publish to decision, against 7 and 9 ms for one in-memory scorer. The cause was not
+  Redis: LightGBM, by default, uses every core for each prediction, so each scorer was starting dozens of threads to
+  score a handful of payments and the three fought over the cores. The scorer now uses one thread per batch
+  (`LGBM_THREADS`, default 1); the numbers in the table above and in the first rows of the demo predate that.
 - **Only the PaySim model's path moved.** The heuristic scorer's feature state is still in memory, and
   `FEATURE_STORE=redis` with it is refused. One Redis node, no failover. After a crash a payment may be counted twice
   or not at all. The history features are an approximation across partitions by construction; with one partition or one
@@ -526,6 +531,60 @@ How to read it:
 - **This is not a leaderboard number.** The competition scored a different, later, unlabelled period, and its top
   entries used far more feature engineering.
 
+## Load test
+
+`python scripts/load_matrix.py` (needs Docker and the PaySim CSV) recreates the stack for each scorer configuration
+and runs `fraudradar.loadtest` inside the Compose network, so every clock is the same one. The generator is **open
+loop**: it publishes real PaySim rows to Kafka at a fixed rate whatever the scorers do, so a scorer that cannot keep up
+shows as delay and a shortfall instead of slowing the test. Latency is measured from the moment a payment is published
+to the moment its decision arrives back at the generator. Steps are 15 s at 250 to 8,000 payments/s, then 6 s at
+12,000 to 24,000 (all seven configurations ran the low ramp, four of them the high one too; raw results in
+[docs/results/load_test](docs/results/load_test)). `docker stats` is sampled once a second so each step has the CPU the
+scorers, Redis and the broker used. "Kept up" below means at least 99% of the target rate was decided within the step
+and p99 stayed under 100 ms.
+
+| Configuration | Highest rate it kept up with (tx/s) | p50 / p99 there (ms) | Busiest scorer CPU there | First rate it did not keep up with |
+|---|---|---|---|---|
+| Heuristic, state in memory, 1 scorer (synthetic payments) | 16,000 | 6 / 13 | 85% | 24,000 (16,705/s decided, p99 3.1 s) |
+| LightGBM, state in memory, 1 scorer, one payment at a time | 12,000 | 10 / 50 | 92% | 16,000 (14,243/s, p99 0.7 s) |
+| LightGBM, Redis, 1 scorer, batched | 16,000 | 12 / 56 | 76% | 24,000 (21,031/s, p99 0.8 s) |
+| LightGBM, Redis, 2 scorers, 2 partitions | 8,000 (highest tried) | 8 / 12 | 41% | not reached |
+| LightGBM, Redis, 3 scorers, 3 partitions | 24,000 (highest tried) | 9 / 32 | 62% | not reached |
+
+(CPU is a share of one core, as `docker stats` reports it.) What it shows:
+
+- **The scorers are limited by one Python process, not by the model or Redis.** Every saturated configuration was using
+  about one core, and the heuristic, which has no model, saturates in the same range as LightGBM with Redis (16,000 to
+  24,000/s). Per payment the cost is the Kafka client and the JSON, which is why adding partitions and scorers works:
+  three scorers had not saturated at 24,000/s, the highest rate tried (the generator is itself one Python process).
+- **Batching more than pays for Redis.** One scorer with its state in Redis kept up with 16,000 payments/s; with its state in
+  memory and one prediction per payment, 12,000. Moving the state out costs memory elsewhere instead of in the scorer: the
+  in-memory LightGBM scorer held about 1.04 GiB, each Redis-backed scorer 57 MiB plus about 280 to 300 MiB in Redis.
+- **Threads were the earlier latency problem.** At 250 payments/s, LightGBM using all cores (its default) against one
+  thread per batch:
+
+  | | p50 / p99 (ms) | CPU of each scorer |
+  |---|---|---|
+  | 1 scorer, all cores | 14 / 47 | 1,808% |
+  | 1 scorer, 1 thread | 8 / 10 | 26% |
+  | 3 scorers, all cores | 80 / 223 | about 560% each |
+  | 3 scorers, 1 thread | 9 / 12 | 12% each |
+
+  With all cores a scorer spends about eighteen cores of CPU to score 250 payments a second, and three of them
+  slow each other down: the median is about ten times higher. At 8,000 payments/s one scorer with all cores had p50 35 ms and p99 94 ms.
+- **At low load the median is 6 to 9 ms in every one-thread configuration.** Of that, 2 to 3 ms is the time until the scorer has decided; the
+  rest is the decision's trip back. This floor was not broken down further.
+
+What is not shown:
+
+- Everything ran on one 20-core laptop: this tool, the broker, Redis and the scorers share its cores. The numbers
+  compare the pieces; they are not what a cluster would do.
+- One run per cell, 15 s (6 s above 8,000). The 2-scorer row stops at 8,000 payments/s, and the 3-scorer row at 24,000 because that was the
+  highest rate tried, so their real limits are unknown.
+- The heuristic row uses the synthetic generator; the others use real PaySim rows, so its numbers are not strictly comparable.
+- Latency here includes the generator's own scheduling (a few milliseconds at most) and is for payments scored one Kafka batch at a time;
+  no explanation text is requested except for flagged payments, which are a tiny share.
+
 ## Roadmap
 
 - [x] Train a LightGBM model on PaySim and report it honestly (see above)
@@ -536,7 +595,7 @@ How to read it:
 - [x] Demo on the real PaySim log (`docker-compose.paysim.yml`)
 - [ ] IEEE-CIS follow-up: windowed history counts instead of running counts, and several seeds/splits
 - [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim); the skew check lists what is off
-- [ ] Load test, with p50/p99 under rising throughput
+- [x] Load test, with p50/p99 under rising throughput (see above)
 - [ ] Drift detection and automatic retraining when attackers change tactics
 - [x] Training-serving skew check, with a first measurement against the real PaySim training part (see above)
 - [ ] Feature lineage
@@ -557,6 +616,7 @@ src/fraudradar/
   artifacts/     the trained model, its metadata and (once added) reference_stats.json
   skew.py        training-serving skew check
   replay.py      replays the real PaySim log through the serving code
+  loadtest.py    open-loop load generator and latency report
   paysim_stream.py  the PaySim log as the demo's live traffic
   redis_features.py the PaySim model's history features in Redis (shared by scorer replicas)
   paysim_warmup.py  loads the history before the demo's start into Redis, once

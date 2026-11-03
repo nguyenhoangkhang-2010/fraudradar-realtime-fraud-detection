@@ -55,6 +55,7 @@ services:
       KAFKA_BOOTSTRAP: redpanda:9092
       # heuristic (default) or lightgbm, e.g.  SCORER=lightgbm docker compose up
       SCORER: ${SCORER:-heuristic}
+      LGBM_THREADS: ${LGBM_THREADS:-1}
 
   api:
     <<: *app
