@@ -1,0 +1,208 @@
+{
+ "source": "paysim",
+ "duration_s": 15,
+ "rates": [
+  250,
+  500,
+  1000,
+  2000,
+  4000,
+  8000
+ ],
+ "steps": [
+  {
+   "target_rate": 250,
+   "sent": 3750,
+   "sent_rate": 250.0,
+   "decided": 3750,
+   "lost": 0,
+   "decided_in_window_rate": 250.0,
+   "e2e_ms": {
+    "p50": 14,
+    "p90": 31,
+    "p99": 47,
+    "p999": 62,
+    "max": 77
+   },
+   "to_decision_ms": {
+    "p50": 4,
+    "p99": 21
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693169736,
+    1793693184726
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     1808.0
+    ],
+    "redis": 4.0,
+    "redpanda": 11.0
+   }
+  },
+  {
+   "target_rate": 500,
+   "sent": 7500,
+   "sent_rate": 500.0,
+   "decided": 7500,
+   "lost": 0,
+   "decided_in_window_rate": 499.6,
+   "e2e_ms": {
+    "p50": 11,
+    "p90": 23,
+    "p99": 41,
+    "p999": 55,
+    "max": 65
+   },
+   "to_decision_ms": {
+    "p50": 4,
+    "p99": 18
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693187232,
+    1793693202239
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     1913.0
+    ],
+    "redis": 5.0,
+    "redpanda": 13.0
+   }
+  },
+  {
+   "target_rate": 1000,
+   "sent": 15000,
+   "sent_rate": 999.4,
+   "decided": 15000,
+   "lost": 0,
+   "decided_in_window_rate": 997.2,
+   "e2e_ms": {
+    "p50": 13,
+    "p90": 26,
+    "p99": 43,
+    "p999": 66,
+    "max": 75
+   },
+   "to_decision_ms": {
+    "p50": 4,
+    "p99": 18
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693204743,
+    1793693219753
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     1902.0
+    ],
+    "redis": 7.0,
+    "redpanda": 14.0
+   }
+  },
+  {
+   "target_rate": 2000,
+   "sent": 30000,
+   "sent_rate": 1999.4,
+   "decided": 30000,
+   "lost": 0,
+   "decided_in_window_rate": 1998.1,
+   "e2e_ms": {
+    "p50": 14,
+    "p90": 26,
+    "p99": 41,
+    "p999": 59,
+    "max": 69
+   },
+   "to_decision_ms": {
+    "p50": 5,
+    "p99": 19
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693222264,
+    1793693237266
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     1791.0
+    ],
+    "redis": 9.0,
+    "redpanda": 13.0
+   }
+  },
+  {
+   "target_rate": 4000,
+   "sent": 60000,
+   "sent_rate": 3999.1,
+   "decided": 60000,
+   "lost": 0,
+   "decided_in_window_rate": 3996.1,
+   "e2e_ms": {
+    "p50": 22,
+    "p90": 42,
+    "p99": 59,
+    "p999": 70,
+    "max": 78
+   },
+   "to_decision_ms": {
+    "p50": 8,
+    "p99": 30
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693239789,
+    1793693254793
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     1863.0
+    ],
+    "redis": 12.0,
+    "redpanda": 16.0
+   }
+  },
+  {
+   "target_rate": 8000,
+   "sent": 120000,
+   "sent_rate": 7997.8,
+   "decided": 120000,
+   "lost": 0,
+   "decided_in_window_rate": 7996.2,
+   "e2e_ms": {
+    "p50": 35,
+    "p90": 55,
+    "p99": 94,
+    "p999": 124,
+    "max": 129
+   },
+   "to_decision_ms": {
+    "p50": 14,
+    "p99": 49
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693257324,
+    1793693272326
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     1729.0
+    ],
+    "redis": 15.0,
+    "redpanda": 16.0
+   }
+  }
+ ],
+ "name": "lightgbm-redis-1-allthreads",
+ "what": "as lightgbm-redis-1, but LightGBM uses all cores for each batch",
+ "scorers": 1,
+ "partitions": 1,
+ "memory_mib_max": {
+  "fraudradar-redis-1": 314.0,
+  "fraudradar-scorer-1": 57.9
+ }
+}

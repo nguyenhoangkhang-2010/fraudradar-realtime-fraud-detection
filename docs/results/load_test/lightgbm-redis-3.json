@@ -1,0 +1,222 @@
+{
+ "source": "paysim",
+ "duration_s": 15,
+ "rates": [
+  250,
+  500,
+  1000,
+  2000,
+  4000,
+  8000
+ ],
+ "steps": [
+  {
+   "target_rate": 250,
+   "sent": 3750,
+   "sent_rate": 250.0,
+   "decided": 3750,
+   "lost": 0,
+   "decided_in_window_rate": 250.0,
+   "e2e_ms": {
+    "p50": 9,
+    "p90": 11,
+    "p99": 12,
+    "p999": 13,
+    "max": 15
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 4
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793692976632,
+    1793692991629
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     12.0,
+     12.0,
+     12.0
+    ],
+    "redis": 5.0,
+    "redpanda": 15.0
+   }
+  },
+  {
+   "target_rate": 500,
+   "sent": 7500,
+   "sent_rate": 500.0,
+   "decided": 7500,
+   "lost": 0,
+   "decided_in_window_rate": 499.7,
+   "e2e_ms": {
+    "p50": 8,
+    "p90": 9,
+    "p99": 10,
+    "p999": 12,
+    "max": 13
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 3
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793692994134,
+    1793693009135
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     15.0,
+     15.0,
+     15.0
+    ],
+    "redis": 6.0,
+    "redpanda": 16.0
+   }
+  },
+  {
+   "target_rate": 1000,
+   "sent": 15000,
+   "sent_rate": 999.8,
+   "decided": 15000,
+   "lost": 0,
+   "decided_in_window_rate": 999.6,
+   "e2e_ms": {
+    "p50": 8,
+    "p90": 9,
+    "p99": 10,
+    "p999": 11,
+    "max": 14
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 3
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693011644,
+    1793693026644
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     21.0,
+     21.0,
+     21.0
+    ],
+    "redis": 8.0,
+    "redpanda": 18.0
+   }
+  },
+  {
+   "target_rate": 2000,
+   "sent": 30000,
+   "sent_rate": 1999.5,
+   "decided": 30000,
+   "lost": 0,
+   "decided_in_window_rate": 1998.5,
+   "e2e_ms": {
+    "p50": 7,
+    "p90": 10,
+    "p99": 11,
+    "p999": 12,
+    "max": 15
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 3
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693029153,
+    1793693044157
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     31.0,
+     31.0,
+     32.0
+    ],
+    "redis": 11.0,
+    "redpanda": 23.0
+   }
+  },
+  {
+   "target_rate": 4000,
+   "sent": 60000,
+   "sent_rate": 3999.0,
+   "decided": 60000,
+   "lost": 0,
+   "decided_in_window_rate": 3997.9,
+   "e2e_ms": {
+    "p50": 7,
+    "p90": 10,
+    "p99": 12,
+    "p999": 14,
+    "max": 17
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 4
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693046675,
+    1793693061677
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     41.0,
+     41.0,
+     41.0
+    ],
+    "redis": 16.0,
+    "redpanda": 27.0
+   }
+  },
+  {
+   "target_rate": 8000,
+   "sent": 120000,
+   "sent_rate": 7998.2,
+   "decided": 120000,
+   "lost": 0,
+   "decided_in_window_rate": 7993.7,
+   "e2e_ms": {
+    "p50": 8,
+    "p90": 10,
+    "p99": 12,
+    "p999": 14,
+    "max": 19
+   },
+   "to_decision_ms": {
+    "p50": 2,
+    "p99": 3
+   },
+   "saturated": false,
+   "window_epoch_ms": [
+    1793693064208,
+    1793693079212
+   ],
+   "cpu_percent_of_one_core": {
+    "scorers_each": [
+     38.0,
+     38.0,
+     39.0
+    ],
+    "redis": 17.0,
+    "redpanda": 24.0
+   }
+  }
+ ],
+ "name": "lightgbm-redis-3",
+ "what": "LightGBM, state in Redis, 3 scorers, 3 partitions",
+ "scorers": 3,
+ "partitions": 3,
+ "memory_mib_max": {
+  "fraudradar-scorer-2": 57.3,
+  "fraudradar-scorer-3": 56.9,
+  "fraudradar-redis-1": 302.6,
+  "fraudradar-scorer-1": 57.4
+ }
+}

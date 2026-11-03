@@ -60,6 +60,10 @@ class LightGBMScorer:
         self.default_review: float = thresholds["fpr_0.001"]
         self.default_block: float = thresholds["fpr_0.0001"]
         self._explain_from = self.default_review  # explaining costs more than scoring
+        # Threads LightGBM may use for a batch. 1 by default: a batch of a few hundred rows is too small for
+        # OpenMP to pay off, and every scorer process spinning up all the cores' threads makes replicas
+        # fight over them. 0 means "all cores".
+        self.num_threads = 1
 
     @classmethod
     def load(cls, directory: str | Path = ARTIFACT_DIR) -> "LightGBMScorer":
@@ -91,11 +95,11 @@ class LightGBMScorer:
     def score_many(self, rows: list[np.ndarray]) -> list[tuple[float, list[str]]]:
         """`score` for many payments at once, one prediction call; only flagged ones pay for an explanation."""
         x = np.vstack(rows)
-        p = self.booster.predict(x)
+        p = self.booster.predict(x, num_threads=self.num_threads)
         out: list[tuple[float, list[str]]] = [(float(v), []) for v in p]
         hot = np.flatnonzero(p >= self._explain_from)
         if len(hot):
-            contrib = self.booster.predict(x[hot], pred_contrib=True)[:, :-1]
+            contrib = self.booster.predict(x[hot], pred_contrib=True, num_threads=self.num_threads)[:, :-1]
             for k, i in enumerate(hot):
                 out[i] = (out[i][0], self._reasons(contrib[k], x[i]))
         return out
@@ -119,9 +123,11 @@ def load_lightgbm_engine(
     amount_scale: float = AMOUNT_SCALE,
     redis_client=None,
     namespace: str = "ps",
+    num_threads: int = 1,
 ) -> ScoringEngine:
     """With `redis_client` the history features live in Redis (see redis_features), otherwise in this process."""
     scorer = LightGBMScorer.load(directory)
+    scorer.num_threads = num_threads
     categories = scorer.meta["type_categories"]
     if redis_client is None:
         store = PaymentFeatureStore(scorer.feature_names, categories, amount_scale=amount_scale)
