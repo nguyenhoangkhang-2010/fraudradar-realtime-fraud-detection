@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "httpx>=0.27"]  # httpx: the API tests' client
 # Serving the PaySim-trained model; the heuristic scorer needs none of this.
 model = ["lightgbm>=4.0", "numpy>=1.24"]
 # Feature state in Redis (see redis_features); needs the model extra too.

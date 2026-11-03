@@ -117,6 +117,15 @@ python -m fraudradar.evaluate --scorer lightgbm
 python -m fraudradar.skew
 ```
 
+What the tests cover besides the model and the features: the API (`tests/test_api.py`) runs the real FastAPI app
+with a test client and fake Kafka objects, so the endpoints, the WebSocket hub and the consumer loops are exercised
+without a broker (the Kafka connection itself is not: that is what the Docker runs above check); the rolling metrics
+(`test_metrics.py`) are unit-tested; and for the map page, which has no build step, `test_ui_static.py` checks that
+the scripts parse (with `node`, when installed), that every element they look up exists, that linked files exist,
+and that the fields the script reads from a tick are the fields the server sends. Nothing drives a real browser in
+CI; I checked the page by hand against the real API fed by the offline engine (ticks, KPIs, the model-health badge,
+and the Launch attack flow through to "Ring contained").
+
 ## Training a model
 
 Training is separate from running the services and needs none of Docker, Kafka or a GPU. Install the
