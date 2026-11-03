@@ -7,6 +7,8 @@ A real-time fraud detection system, built end to end: payments stream through Ka
 point-in-time streaming features and a LightGBM model, and show up on a live map you can drill into from the world
 down to a city's districts. A button injects a fraud ring so you can watch the system find it.
 
+Tiếng Việt: [README.vi.md](README.vi.md)
+
 Write-up: [Six times my fraud detector's numbers were wrong](docs/blog/building-fraudradar.md), what each check against reality found.
 
 ![A fraud ring is detected and contained on the live map](docs/img/attack.gif)
@@ -72,8 +74,9 @@ flowchart LR
 | ![Ring contained](docs/img/ring-contained.jpg) | |
 | 28 of 28 payments of the injected ring blocked. | |
 
-> **Status:** works end to end (streaming path, features, model serving, tests, UI, CI). Feature state lives in the
-> scorer's memory, so there is one scorer replica for now; see [Roadmap](#roadmap) for what is deliberately not done.
+> **Status:** works end to end (streaming path, features, model serving, tests, UI, CI). By default feature state lives
+> in the scorer's memory, so there is one scorer replica; `FEATURE_STORE=redis` lets several share it (see
+> [Shared feature state in Redis](#shared-feature-state-in-redis)). See [Roadmap](#roadmap) for what is deliberately not done.
 
 ## Run it
 
@@ -680,7 +683,7 @@ balance, not all of it, which is what PaySim's fraud always does and what the mo
   decile. The flag rate does drop, from 1.29% to 0.28% window on window (0.07 to 0.63% after), but the control moves as much
   between windows with no drift at all (0.33% to 1.38% from hour 404 to 451, the other way), so with no
   counterfactual a fall reads as the base-rate noise above. Catching this needs labels, which in a real system arrive days late, or a signal
-  that normalises for the fraud share; this branch does not have one.
+  that normalises for the fraud share; this project does not have one yet.
 
 **Retraining.** The model in service on the held-out hours, and each challenger:
 
@@ -762,7 +765,7 @@ src/fraudradar/
   payment_features.py  the PaySim model's 14 inputs, built from the stream
   model.py       heuristic scorer and thresholds
   lgbm.py        loads the trained LightGBM model and explains its scores
-  artifacts/     the trained model, its metadata and (once added) reference_stats.json
+  artifacts/     the trained model, its metadata and reference_stats.json
   skew.py        training-serving skew check, and `build_reference` (the notebook's reference, as code)
   drift.py       drift monitor, injected drift scenarios, windowed scan of the log
   retrain.py     retrain from the log, gate against the model in service
