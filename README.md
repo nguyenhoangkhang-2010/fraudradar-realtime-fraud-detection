@@ -34,6 +34,11 @@ places are assigned from account names; the map is decoration, the scores are no
 - **Training and serving agree.** The serving code, fed one payment at a time, reproduces the notebook's test metrics
   to the digits shown ([replay](#replaying-the-real-paysim-log)), and the live Kafka pipeline gave the same number of
   false blocks as the offline replay on the same rows.
+- **It notices when the model goes stale and replaces it without a restart.** Each scorer watches its own inputs and
+  flag rate and reports to the map; a retrain command builds a new version from the log, gates it against the one in
+  service and promotes it through a small registry the scorers follow. Tried on drift injected into the real log:
+  one drift only the monitor could see, one only labels could, and what a retrain recovers
+  ([Drift and retraining](#drift-and-retraining)).
 - **Bugs found by testing against reality**, each fixed and written up: a simulator whose honest traffic looked
   nothing like the training data ([skew check](#training-serving-skew-check)), a model file LightGBM could not read
   after Git rewrote its line endings, and a Docker image missing a system library.
@@ -49,7 +54,9 @@ flowchart LR
   api["api<br/>FastAPI + WebSocket<br/>rolling metrics"]
   ui["browser<br/>MapLibre map + account graph"]
   ctl[("control")]
+  drift[("drift")]
   sim --> tx --> sc --> dec --> api --> ui
+  sc -- "drift report" --> drift --> api
   ui -- "Launch attack" --> api
   api --> ctl --> sim
 ```
@@ -585,6 +592,132 @@ What is not shown:
 - Latency here includes the generator's own scheduling (a few milliseconds at most) and is for payments scored one Kafka batch at a time;
   no explanation text is requested except for flagged payments, which are a tiny share.
 
+## Drift and retraining
+
+A model goes stale when the traffic stops looking like what it learned from, and in fraud the people on the other
+side change their behaviour on purpose. This part adds the pieces to notice that and to replace the model without
+stopping the scorers. All of it is exercised in the experiment below; none of it has seen drift that was not
+injected, because the PaySim log has no real change of regime.
+
+- **Monitor** (`drift.py`). Each LightGBM scorer keeps the last 20,000 payments' feature rows and flags and, every 10 s,
+  publishes a report to a `drift` topic: the population stability index of each feature against the training part
+  (`reference_stats.json`, the measure the [skew check](#training-serving-skew-check) uses), counting only features the
+  model splits on, and the share of payments flagged against the first full window after the model went live. The API
+  serves the latest report per scorer at `/api/drift`, and the map's top bar shows a badge (healthy, watch, drifting)
+  with the reasons on hover. The scorer pays about 8 µs per payment for it (a 40 µs engine call became 48 µs in a
+  microbenchmark) and 7 ms every 10 s for the report.
+- **Retrain** (`python -m fraudradar.retrain --now 600 --promote`, `retrain.py`). The notebook's training as a command:
+  features come from the serving code, labels are only used up to `now - label_delay` (48 h by default), the newest
+  labelled hours are split into a validation part (early stopping and the two thresholds) and a *gate* part neither
+  model has been tuned on, and the new version is written with its own `reference_stats.json` and a report.
+  `build_reference` reproduces the notebook's reference exactly (checked against the committed one on the real training
+  part: the same 3,820,599 rows and 3,193 fraud cases, the same kind of bins, bin shares within 3e-7 and bin edges within 6e-7).
+- **Gate.** The challenger replaces the model in service only if it adds 0.002 average precision on the gate part, or
+  if the model in service has drifted off its false-alarm target (over 3x the 0.1% it was set for) and the challenger at
+  least halves that without losing ranking; a challenger over 5x the target never goes in. The second rule exists
+  because of the inflation case below, where average precision does not move at all.
+- **Registry** (`registry.py`, `models/`). Versions sit next to each other and `current.json` names the one in service;
+  promoting, or promoting an older version again, is one atomic file rewrite, with every promotion logged to
+  `history.jsonl`. Scorers started with `MODEL_REGISTRY=/models` (the Compose default; the folder is git-ignored) look at
+  the pointer every 5 s and switch between two batches, keeping their feature state. A version the running feature
+  store cannot serve (other columns, or a Redis store asked to use a feature it does not keep) is logged and refused,
+  and the old model keeps scoring. Tried live on the running stack: promoting `v2-evasion` printed `now serving model
+  v2-evasion (was paysim_v1)` within a second, promoting a version with a corrupted feature list printed `not switching
+  ... still serving v2-evasion`, and `python -m fraudradar.registry promote paysim_v1` rolled back.
+
+### The experiment
+
+`python scripts/drift_experiment.py` injects drift into the real PaySim log from hour 450 on (`scenario`s in `drift.py`),
+then does two things, with the same real, untouched windows as a control. The model in service is the bundled one
+(trained on hours 1 to 281, tuned on 282 to 355).
+
+1. A scan, a 24-hour window at a time over the model's test part (hours 356 to 743): the monitor's two signals, and
+   the average precision the model really had (which needs labels).
+2. Retraining as it would have happened at hours 500, 550 and 600 with 48 hours of label delay, and, as a control, at
+   hour 640 with instant labels. Every challenger, whatever the gate said, is then measured on hours 650 to 743, which
+   neither it nor the model in service has seen (1,038 fraud cases).
+
+![Flag rate, PSI of the targeted feature and average precision per 24-hour window, for each injected drift, against the same windows without drift](docs/img/drift_retrain.png)
+
+*Dashed grey: the same hours of the real log with nothing injected. The last window holds few payments and a fraud share of 15%.*
+
+**What the real log does by itself.** Before injecting anything, the scan shows the monitor crying wolf
+([docs/results/drift_retrain/scan_natural.txt](docs/results/drift_retrain/scan_natural.txt)). From hour 404 on, PaySim's honest
+traffic collapses (96,000 payments in a day, then 17,000, then 7,000) while fraud stays at about 11 cases an hour, so
+the fraud share goes from 0.1% to 1 to 15%, the hour-of-day spread of the traffic changes (PSI of `hour` 0.6 to 3.6 from
+hour 404, against 0.02 to 0.03 before) and the flag rate follows the fraud share. The model is unaffected: average precision
+stays at 0.997 to 1.000 in every window. So "worst PSI" is red for most of the real log, and a flag-rate test
+against a fixed baseline fires for the wrong reason (the base rate moved, not the model). Neither signal is a
+verdict; they say where to look.
+
+**Inflation: every amount triples (covariate drift).**
+
+- The monitor sees it at once and clearly: PSI of `amount_log` is 0.49 to 0.76 in every window from hour 452 to 715, against at
+  most 0.04 in the control, and the flag rate is 2.5 to 10 times the control's (2.9 to 8.9% against 0.4 to 3.6%).
+- Average precision does not see it at all: 0.993 to 1.000 throughout. The ranking of payments is still right. But at
+  the model's fixed review threshold, on the held-out hours, 5.5% of honest payments are flagged against the 0.1%
+  it was set for, and only 19% of flags are fraud, with recall at 1.000. A dashboard that watched only average
+  precision or recall would have called this model healthy while the analysts drowned.
+
+**Evasion: fraud stops emptying the account (concept drift).** From hour 450 a fraud payment takes 20 to 80% of the
+balance, not all of it, which is what PaySim's fraud always does and what the model learned.
+
+- Average precision falls from 0.95 to 0.27 in the first full window and stays between 0.13 and 0.39; recall at the
+  review threshold falls to 0.10 to 0.27. On the held-out hours: average precision 0.303, recall 0.205.
+- The unlabelled signals do not isolate it. Not one feature's spread moves: PSI of `amount_to_oldbal` is 0.00 to 0.03 in every window up to hour 691, the
+  same as the control's, and of `drains_account` 0.00 to 0.01, because fraud is 0.1 to 0.3% of the rows and moves no
+  decile. The flag rate does drop, from 1.29% to 0.28% window on window (0.07 to 0.63% after), but the control moves as much
+  between windows with no drift at all (0.33% to 1.38% from hour 404 to 451, the other way), so with no
+  counterfactual a fall reads as the base-rate noise above. Catching this needs labels, which in a real system arrive days late, or a signal
+  that normalises for the fraud share; this branch does not have one.
+
+**Retraining.** The model in service on the held-out hours, and each challenger:
+
+| Scenario | Retrain at hour | Labels known up to | Drifted fraud in training / validation | Gate | Held-out AP | Held-out recall | Held-out false alarms |
+|---|---|---|---|---|---|---|---|
+| Evasion | in service | | | | 0.303 | 0.205 | 0.033% |
+| | 500 | 452 | 0 / 0 | pass | 0.380 | 0.237 | 0.163% |
+| | 550 | 502 | 0 / 188 | pass | 0.396 | 0.265 | 0.020% |
+| | 600 | 552 | 308 / 394 | pass | 0.884 | 0.768 | 0.080% |
+| | 640, instant labels | 640 | 1,246 / 364 | pass | 0.902 | 0.817 | 0.129% |
+| Inflation | in service | | | | 0.9985 | 1.000 | 5.487% |
+| | 500 | 452 | 0 / 0 | **fail** | 0.9977 | 1.000 | 5.414% |
+| | 550 | 502 | 0 / 188 | **fail** | 0.9850 | 0.995 | 0.322% |
+| | 600 | 552 | 308 / 394 | pass | 0.9998 | 1.000 | 0.098% |
+| | 640, instant labels | 640 | 1,246 / 364 | pass | 0.9993 | 1.000 | 0.112% |
+
+(Held-out recall and false alarms are at each model's own review threshold; the target false-alarm rate is 0.100%.)
+
+- **Retraining only helps once labelled examples of the new behaviour have reached the training part.** Evasion started at 450;
+  the retrain at 500 could see labels only up to 452, so it trained on the old behaviour and gained 0.08 average
+  precision, and the one at 550 trained on none of it (its 188 drifted cases went to validation). The one at 600, with 308 drifted
+  fraud cases in training, recovered to 0.884. Waiting for labels cost about 150 hours of a model that missed four
+  fraud cases in five. With instant labels at 640 the result is 0.902, only a little better than with the delay at 600, so
+  the lag matters most in the first hundred hours.
+- **For inflation, retraining is about the threshold, not the ranking.** At 600 the challenger's false alarms are back at 0.098%
+  against 5.5%, with average precision unchanged (0.9998 against 0.9985).
+- **The gate refused two models, one of which it arguably should have taken.** At 500 nothing had drifted in the gate part yet
+  and the challenger was no better, so "no" is right. At 550 the challenger cut false alarms from 5.1% to 0.38% on the gate
+  part but lost 0.018 average precision there (trained on pre-drift data only, with drifted data used only to stop
+  early), so the rule refused it; on the held-out hours it would have cut false alarms from 5.5% to 0.32% for
+  0.013 average precision. How much ranking to trade for false alarms is a business choice the rule hard-codes at
+  "none". In the other direction, the gate passed the evasion retrain at 500 on a gain of 0.0045 on a gate window where nothing had
+  drifted: a gain that size is within what a different seed could produce, so 0.002 is a low bar.
+
+What this does not show:
+
+- **Everything drifted here was injected**, on a simulated dataset, in two hand-picked ways. It shows the machinery works and
+  what each signal can and cannot see; it says nothing about how often real fraud drifts, or in which way.
+- One run per cell, one seed; no confidence intervals. The held-out stretch holds 1,038 fraud cases, which is enough for the
+  large effects above and not for the small ones (0.002 of average precision).
+- The monitor's limits (PSI above 0.1 and 0.25, a flag-rate z-score above 4) are the usual rules of thumb, not tuned, and, as the
+  control shows, they fire on a base-rate shift that does not hurt the model.
+- Nothing starts a retrain by itself. The command exists and is safe to schedule; the trigger (a job that watches
+  the reports, waits for labels and runs it) does not. The monitor also never sees labels: wiring late labels into it
+  (recall on the confirmed fraud of last week) is the missing piece for concept drift.
+- The retrain reads the whole CSV and takes about two minutes for features and about 20 seconds to fit; it is a batch job, not
+  something a scorer does.
+
 ## Roadmap
 
 - [x] Train a LightGBM model on PaySim and report it honestly (see above)
@@ -596,7 +729,9 @@ What is not shown:
 - [ ] IEEE-CIS follow-up: windowed history counts instead of running counts, and several seeds/splits
 - [ ] Calibrate the simulator against a public dataset (for example IEEE-CIS or PaySim); the skew check lists what is off
 - [x] Load test, with p50/p99 under rising throughput (see above)
-- [ ] Drift detection and automatic retraining when attackers change tactics
+- [x] Drift monitor, retrain command with a gate, and a model registry the scorers follow live (see above)
+- [ ] Start a retrain by itself when the monitor says drift, once labels have arrived
+- [ ] Feed late fraud labels into the monitor (recall on confirmed fraud), and a flag-rate signal that normalises for the fraud share
 - [x] Training-serving skew check, with a first measurement against the real PaySim training part (see above)
 - [ ] Feature lineage
 
@@ -605,6 +740,9 @@ What is not shown:
 ```
 scripts/
   build_geodata.py  downloads and builds the map datasets
+  load_matrix.py    runs the load test against each scorer configuration
+  drift_experiment.py  injects drift into the PaySim log, scans it, retrains and measures
+  plot_drift.py     draws docs/img/drift_retrain.png from the experiment's results
 src/fraudradar/
   geo.py         active places and districts, shared by the simulator and the map
   data/          countries, places and districts as GeoJSON (built, committed)
@@ -614,7 +752,10 @@ src/fraudradar/
   model.py       heuristic scorer and thresholds
   lgbm.py        loads the trained LightGBM model and explains its scores
   artifacts/     the trained model, its metadata and (once added) reference_stats.json
-  skew.py        training-serving skew check
+  skew.py        training-serving skew check, and `build_reference` (the notebook's reference, as code)
+  drift.py       drift monitor, injected drift scenarios, windowed scan of the log
+  retrain.py     retrain from the log, gate against the model in service
+  registry.py    model versions and the pointer the scorers follow
   replay.py      replays the real PaySim log through the serving code
   loadtest.py    open-loop load generator and latency report
   paysim_stream.py  the PaySim log as the demo's live traffic

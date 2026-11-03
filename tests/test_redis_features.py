@@ -128,3 +128,13 @@ def test_state_survives_a_new_store_and_namespaces_do_not_mix(client, scorer, ns
     assert other.columns(tx)["dest_prior_in"] == 0
     assert first.clear() == 1
     assert second.columns(tx)["dest_prior_in"] == 0
+
+
+def test_the_redis_store_refuses_a_swap_to_a_model_that_needs_history_it_does_not_keep(client, scorer, ns):
+    from types import SimpleNamespace
+
+    store = RedisPaymentFeatureStore(client, scorer.feature_names, scorer.meta["type_categories"], scorer.unused_features(), ns)
+    store.check_model(scorer)  # the model it was built for is fine
+    greedy = SimpleNamespace(feature_names=scorer.feature_names, meta=scorer.meta, unused_features=lambda: [])
+    with pytest.raises(ValueError, match="does not keep"):
+        store.check_model(greedy)

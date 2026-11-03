@@ -1,0 +1,522 @@
+{
+ "scenario": "inflation",
+ "from_step": 450,
+ "windows": [
+  {
+   "hours": [
+    356,
+    379
+   ],
+   "payments": 371878,
+   "fraud": 260,
+   "flagged": 458,
+   "flag_rate": 0.0012315867031660922,
+   "flag_rate_z": -2.6577556633898036e-15,
+   "worst_psi": 0.030184898998067377,
+   "worst_feature": "hour",
+   "features_different": [],
+   "average_precision": 0.9999257477118939,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    380,
+    403
+   ],
+   "payments": 420109,
+   "fraud": 298,
+   "flagged": 458,
+   "flag_rate": 0.001090193259368402,
+   "flag_rate_z": -2.613035860475024,
+   "worst_psi": 0.02037438067349434,
+   "worst_feature": "amount_log",
+   "features_different": [],
+   "average_precision": 0.9985124222583975,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    404,
+    427
+   ],
+   "payments": 95699,
+   "fraud": 308,
+   "flagged": 317,
+   "flag_rate": 0.0033124693047994233,
+   "flag_rate_z": 18.354239046248804,
+   "worst_psi": 3.561227458447507,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "average_precision": 0.999978951301294,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    428,
+    451
+   ],
+   "payments": 16898,
+   "fraud": 232,
+   "flagged": 281,
+   "flag_rate": 0.016629186886022013,
+   "flag_rate_z": 57.06972714132336,
+   "worst_psi": 1.904089667652384,
+   "worst_feature": "hour",
+   "features_different": [
+    "hour"
+   ],
+   "average_precision": 1.0,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    452,
+    475
+   ],
+   "payments": 14392,
+   "fraud": 254,
+   "flagged": 1161,
+   "flag_rate": 0.0806698165647582,
+   "flag_rate_z": 271.72227249497206,
+   "worst_psi": 2.5455762716135535,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9999999999999999,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    476,
+    499
+   ],
+   "payments": 22839,
+   "fraud": 242,
+   "flagged": 1402,
+   "flag_rate": 0.06138622531634485,
+   "flag_rate_z": 259.2046385411191,
+   "worst_psi": 1.810350798220209,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9999999999999999,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    500,
+    523
+   ],
+   "payments": 44983,
+   "fraud": 282,
+   "flagged": 2362,
+   "flag_rate": 0.05250872551852922,
+   "flag_rate_z": 310.08666985660557,
+   "worst_psi": 2.6015552257840553,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9998466314292412,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    524,
+    547
+   ],
+   "payments": 54202,
+   "fraud": 204,
+   "flagged": 2278,
+   "flag_rate": 0.04202796944762186,
+   "flag_rate_z": 270.8098261126968,
+   "worst_psi": 0.6526461816433242,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9930609662327705,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    548,
+    571
+   ],
+   "payments": 39306,
+   "fraud": 278,
+   "flagged": 2114,
+   "flag_rate": 0.05378313743448837,
+   "flag_rate_z": 297.06402815046215,
+   "worst_psi": 0.6419688935942252,
+   "worst_feature": "amount_log",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9975483530701212,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    572,
+    595
+   ],
+   "payments": 50284,
+   "fraud": 250,
+   "flagged": 2498,
+   "flag_rate": 0.049677829926020205,
+   "flag_rate_z": 309.7491468388508,
+   "worst_psi": 0.639346454444019,
+   "worst_feature": "amount_log",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9973351134846462,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    596,
+    619
+   ],
+   "payments": 27309,
+   "fraud": 268,
+   "flagged": 802,
+   "flag_rate": 0.029367607748361346,
+   "flag_rate_z": 132.57165673658665,
+   "worst_psi": 2.0166692795056655,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 1.0,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    620,
+    643
+   ],
+   "payments": 7406,
+   "fraud": 262,
+   "flagged": 657,
+   "flag_rate": 0.08871185525249797,
+   "flag_rate_z": 214.6530512221941,
+   "worst_psi": 2.5322722692219175,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9999999999999999,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    644,
+    667
+   ],
+   "payments": 14575,
+   "fraud": 258,
+   "flagged": 1061,
+   "flag_rate": 0.0727958833619211,
+   "flag_rate_z": 246.34048596564148,
+   "worst_psi": 1.9924883680082597,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9971569673047773,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    668,
+    691
+   ],
+   "payments": 44898,
+   "fraud": 250,
+   "flagged": 2906,
+   "flag_rate": 0.06472448661410307,
+   "flag_rate_z": 383.5957312959212,
+   "worst_psi": 1.6275566885836077,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9994364261168385,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    692,
+    715
+   ],
+   "payments": 21972,
+   "fraud": 272,
+   "flagged": 1264,
+   "flag_rate": 0.0575277626069543,
+   "flag_rate_z": 237.92977558789036,
+   "worst_psi": 2.3671316823368667,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "hour"
+   ],
+   "average_precision": 0.9982138885800067,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    716,
+    739
+   ],
+   "payments": 1936,
+   "fraud": 282,
+   "flagged": 295,
+   "flag_rate": 0.15237603305785125,
+   "flag_rate_z": 189.61818068707632,
+   "worst_psi": 2.991125188110189,
+   "worst_feature": "hour",
+   "features_different": [
+    "amount_log",
+    "amount_to_oldbal",
+    "orig_old_zero",
+    "dest_old_zero",
+    "hour"
+   ],
+   "average_precision": 0.9999261229314421,
+   "recall_at_review": 1.0
+  },
+  {
+   "hours": [
+    740,
+    743
+   ],
+   "payments": 50,
+   "fraud": 50,
+   "flagged": 50,
+   "flag_rate": 1.0,
+   "flag_rate_z": 201.36542636336011,
+   "worst_psi": 7.287926429515437,
+   "worst_feature": "hour",
+   "features_different": [
+    "type",
+    "amount_log",
+    "amount_to_oldbal",
+    "drains_account",
+    "orig_old_zero",
+    "dest_old_zero",
+    "dest_is_merchant",
+    "hour",
+    "dest_prior_in"
+   ],
+   "average_precision": 1.0,
+   "recall_at_review": 1.0
+  }
+ ],
+ "holdout_hours": [
+  650,
+  743
+ ],
+ "holdout_champion": {
+  "payments": 80847,
+  "fraud": 1038,
+  "AP": 0.9985312016486525,
+  "recall@0.001": 1.0,
+  "precision@0.001": 0.191618977293705,
+  "false_alarm_rate@0.001": 0.05486849854026488,
+  "recall@0.0001": 1.0,
+  "precision@0.0001": 0.1998844598497978,
+  "false_alarm_rate@0.0001": 0.05206179754163064
+ },
+ "retrains": [
+  {
+   "now": 500,
+   "windows": {
+    "train": [
+     1,
+     380
+    ],
+    "valid": [
+     381,
+     416
+    ],
+    "gate": [
+     417,
+     452
+    ]
+   },
+   "drifted_fraud_labelled_by_then": 30,
+   "gate": {
+    "promote": false,
+    "why": "average precision on the gate window 0.9999 -> 0.9997 (-0.0002); false alarms at the review threshold 0.207% -> 0.476% (target 0.10%); no gain of 0.002 and the model in service is on target",
+    "champion": {
+     "payments": 28329,
+     "fraud": 364,
+     "AP": 0.9998539428765567,
+     "recall@0.001": 1.0,
+     "precision@0.001": 0.8625592417061612,
+     "false_alarm_rate@0.001": 0.0020740210978008227,
+     "recall@0.0001": 1.0,
+     "precision@0.0001": 0.8687350835322196,
+     "false_alarm_rate@0.0001": 0.0019667441444662973
+    },
+    "challenger": {
+     "payments": 28329,
+     "fraud": 364,
+     "AP": 0.9996674850464596,
+     "recall@0.001": 1.0,
+     "precision@0.001": 0.7323943661971831,
+     "false_alarm_rate@0.001": 0.004755944931163955,
+     "recall@0.0001": 1.0,
+     "precision@0.0001": 0.8987654320987655,
+     "false_alarm_rate@0.0001": 0.0014661183622385124
+    }
+   },
+   "holdout_challenger": {
+    "payments": 80847,
+    "fraud": 1038,
+    "AP": 0.9977232063031577,
+    "recall@0.001": 1.0,
+    "precision@0.001": 0.19369285314424334,
+    "false_alarm_rate@0.001": 0.05414176346026137,
+    "recall@0.0001": 1.0,
+    "precision@0.0001": 0.311618132692885,
+    "false_alarm_rate@0.0001": 0.02873109549048353
+   },
+   "seconds": 9.397813500021584,
+   "drifted_fraud_in_training": 0,
+   "drifted_fraud_in_validation": 0
+  },
+  {
+   "now": 550,
+   "windows": {
+    "train": [
+     1,
+     430
+    ],
+    "valid": [
+     431,
+     466
+    ],
+    "gate": [
+     467,
+     502
+    ]
+   },
+   "drifted_fraud_labelled_by_then": 560,
+   "gate": {
+    "promote": false,
+    "why": "average precision on the gate window 1.0000 -> 0.9816 (-0.0184); false alarms at the review threshold 5.131% -> 0.376% (target 0.10%); no gain of 0.002 and the model in service is on target",
+    "champion": {
+     "payments": 40796,
+     "fraud": 372,
+     "AP": 1.0,
+     "recall@0.001": 1.0,
+     "precision@0.001": 0.15208503679476695,
+     "false_alarm_rate@0.001": 0.051306154759548785,
+     "recall@0.0001": 1.0,
+     "precision@0.0001": 0.15938303341902313,
+     "false_alarm_rate@0.0001": 0.048535523451415
+    },
+    "challenger": {
+     "payments": 40796,
+     "fraud": 372,
+     "AP": 0.9816365422653154,
+     "recall@0.001": 1.0,
+     "precision@0.001": 0.7099236641221374,
+     "false_alarm_rate@0.001": 0.0037601424896101326,
+     "recall@0.0001": 0.989247311827957,
+     "precision@0.0001": 0.9761273209549072,
+     "false_alarm_rate@0.0001": 0.0002226400158321789
+    }
+   },
+   "holdout_challenger": {
+    "payments": 80847,
+    "fraud": 1038,
+    "AP": 0.9850375825799162,
+    "recall@0.001": 0.9951830443159922,
+    "precision@0.001": 0.8007751937984496,
+    "false_alarm_rate@0.001": 0.0032201881993258906,
+    "recall@0.0001": 0.9701348747591522,
+    "precision@0.0001": 0.9535984848484849,
+    "false_alarm_rate@0.0001": 0.0006139658434512398
+   },
+   "seconds": 9.48350950004533,
+   "drifted_fraud_in_training": 0,
+   "drifted_fraud_in_validation": 188
+  },
+  {
+   "now": 600,
+   "windows": {
+    "train": [
+     1,
+     480
+    ],
+    "valid": [
+     481,
+     516
+    ],
+    "gate": [
+     517,
+     552
+    ]
+   },
+   "drifted_fraud_labelled_by_then": 1052,
+   "gate": {
+    "promote": true,
+    "why": "average precision on the gate window 0.9952 -> 0.9994 (+0.0042); false alarms at the review threshold 3.868% -> 0.089% (target 0.10%); gain is at least 0.002",
+    "champion": {
+     "payments": 94406,
+     "fraud": 350,
+     "AP": 0.9951947176195675,
+     "recall@0.001": 1.0,
+     "precision@0.001": 0.08776328986960882,
+     "false_alarm_rate@0.001": 0.038679084800544355,
+     "recall@0.0001": 1.0,
+     "precision@0.0001": 0.09426339886883921,
+     "false_alarm_rate@0.0001": 0.035755294718040315
+    },
+    "challenger": {
+     "payments": 94406,
+     "fraud": 350,
+     "AP": 0.9993571655379835,
+     "recall@0.001": 1.0,
+     "precision@0.001": 0.8064516129032258,
+     "false_alarm_rate@0.001": 0.0008930849706557795,
+     "recall@0.0001": 1.0,
+     "precision@0.0001": 0.9722222222222222,
+     "false_alarm_rate@0.0001": 0.00010631963936378328
+    }
+   },
+   "holdout_challenger": {
+    "payments": 80847,
+    "fraud": 1038,
+    "AP": 0.9997869115233149,
+    "recall@0.001": 1.0,
+    "precision@0.001": 0.9301075268817204,
+    "false_alarm_rate@0.001": 0.0009773333834529941,
+    "recall@0.0001": 0.9990366088631984,
+    "precision@0.0001": 0.9932950191570882,
+    "false_alarm_rate@0.0001": 8.770940620731997e-05
+   },
+   "seconds": 27.225465599971358,
+   "drifted_fraud_in_training": 308,
+   "drifted_fraud_in_validation": 394
+  }
+ ]
+}

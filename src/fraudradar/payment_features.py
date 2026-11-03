@@ -67,6 +67,7 @@ class PaymentFeatureStore:
         if unknown:
             raise ValueError(f"model expects features this store cannot build: {sorted(unknown)}")
         self.feature_names = tuple(feature_names)
+        self.type_categories = tuple(type_categories)
         self._type_code = {name: float(i) for i, name in enumerate(type_categories)}
         self.amount_scale = amount_scale
         self.sim_hour_ms = sim_hour_ms
@@ -136,6 +137,13 @@ class PaymentFeatureStore:
             "steps_since_recv": since,
             "amount_to_last_recv": to_last,
         }
+
+    def check_model(self, scorer) -> None:
+        """Raise ValueError if `scorer` was trained on other columns than this store builds."""
+        if tuple(scorer.feature_names) != self.feature_names:
+            raise ValueError("the new model uses different features than the running feature store builds")
+        if tuple(scorer.meta["type_categories"]) != self.type_categories:
+            raise ValueError("the new model codes the payment type differently")
 
     def features(self, tx: Transaction) -> np.ndarray:
         cols = self.columns(tx)

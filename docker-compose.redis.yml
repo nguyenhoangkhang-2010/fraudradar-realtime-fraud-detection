@@ -28,7 +28,7 @@ services:
     # Payments are keyed by sender, so three partitions let three scorers each take a share.
     command:
       - rpk topic create transactions --brokers redpanda:9092 --partitions ${PARTITIONS:-3} --replicas 1 || true;
-        rpk topic create decisions control --brokers redpanda:9092 --partitions 1 --replicas 1 || true
+        rpk topic create decisions control drift --brokers redpanda:9092 --partitions 1 --replicas 1 || true
 
   warmup:
     build: .

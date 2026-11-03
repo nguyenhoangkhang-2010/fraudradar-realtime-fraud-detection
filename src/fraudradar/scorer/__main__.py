@@ -12,12 +12,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import socket
 import time
+from pathlib import Path
 
+import orjson
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from ..config import Settings
 from ..kafka_util import start_with_retry
+from ..lgbm import ARTIFACT_DIR
+from ..registry import Registry
 from ..schemas import Transaction
 from ..serving import build_engine
 
@@ -39,15 +44,58 @@ async def main() -> None:
             replay_csv = resolve_csv(settings.paysim_csv)
             log.info("replaying the real PaySim log from %s", replay_csv)
 
+    registry = Registry(settings.model_registry) if settings.model_registry else None
+    lightgbm = settings.scorer == "lightgbm"
+    model_dir = (registry.current() if registry else None) or ARTIFACT_DIR  # the version in service
+    scorer_id = socket.gethostname()
+    monitor = None
+
+    def install_monitor(engine):
+        """Watch the payments this engine scores (LightGBM only: the heuristic has no model inputs to compare)."""
+        nonlocal monitor
+        if not lightgbm:
+            return
+        from ..drift import monitor_for
+
+        monitor = monitor_for(model_dir, scorer=engine.scorer, window=settings.drift_window)
+        engine.observer = monitor.observe
+
     def new_engine():
         # PaySim amounts are already in the model's units, so they are not rescaled
-        return build_engine(
+        engine = build_engine(
             settings.scorer, settings.block_threshold, settings.review_threshold,
             amount_scale=1.0 if paysim else None,
             redis_url=settings.redis_url if use_redis else None,
             namespace=settings.data_source,
             num_threads=settings.lgbm_threads,
+            directory=model_dir if lightgbm else None,
         )
+        install_monitor(engine)
+        return engine
+
+    def follow_registry() -> None:
+        """Serve the registry's current version if it has changed. A model that cannot be loaded, or that the
+        running feature store cannot serve, is logged and ignored; the old one keeps scoring."""
+        nonlocal model_dir
+        wanted = registry.current()
+        if wanted is None or wanted == model_dir:
+            return
+        try:
+            from ..lgbm import LightGBMScorer
+
+            scorer = LightGBMScorer.load(wanted)
+            scorer.num_threads = settings.lgbm_threads
+            engine.swap_scorer(
+                scorer,
+                scorer.default_block if settings.block_threshold is None else settings.block_threshold,
+                scorer.default_review if settings.review_threshold is None else settings.review_threshold,
+            )
+        except Exception:
+            log.exception("not switching to model %s; still serving %s", wanted.name, model_dir.name)
+            return
+        log.info("now serving model %s (was %s)", wanted.name, model_dir.name)
+        model_dir = wanted
+        install_monitor(engine)
 
     engine = new_engine()
     expected_row: int | None = None  # index of the next PaySim row the scorer expects
@@ -75,6 +123,8 @@ async def main() -> None:
 
     handled = 0
     window_start = time.monotonic()
+    last_poll = last_report = window_start
+    seen_stamp = registry.stamp() if registry else None
     try:
         while True:
             batch = await consumer.getmany(timeout_ms=100, max_records=1000)
@@ -101,6 +151,16 @@ async def main() -> None:
                     decision = engine.handle(tx, now_ms=int(time.time() * 1000))
                     await producer.send(settings.topic_decisions, decision.to_bytes())
                     handled += 1
+            now = time.monotonic()
+            if registry and now - last_poll >= 5:
+                last_poll = now
+                if (stamp := registry.stamp()) != seen_stamp:
+                    seen_stamp = stamp
+                    follow_registry()
+            if monitor is not None and now - last_report >= settings.drift_interval:
+                last_report = now
+                report = {"scorer": scorer_id, "model": model_dir.name, "ts": int(time.time() * 1000), **monitor.report()}
+                await producer.send(settings.topic_drift, orjson.dumps(report))
             if time.monotonic() - window_start >= 10:
                 log.info("scored %.0f tx/s", handled / (time.monotonic() - window_start))
                 handled, window_start = 0, time.monotonic()
